@@ -1,0 +1,11 @@
+{
+    "start_value_gas": 25745,
+    "start_value_electricity": 9838,
+    "start_value_water": 502,
+    "tarif_gas": 8.7,
+    "tarif_electricity": 7.1,
+    "tarif_water": 84.44,
+    "fee_gas": 0.01,
+    "fee_electricity": 0.01,
+    "fee_water": 0.01
+}
