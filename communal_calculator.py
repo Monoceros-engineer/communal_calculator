@@ -854,102 +854,36 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
         results_window.grid_columnconfigure(col, weight=1)
 
 
-"""Добавляем функцию для расчета газа"""
-
-
-def calculate_gas():
-    # Обработка газа
-    if enter_gas.get().strip():
+# Создадим общую функцию для расчета
+def calculate_service(name, get_entry, start_value, tariff, get_checkbox_var, fee):
+    if get_entry.strip():
         try:
-            gas_end = Decimal(enter_gas.get())
-            gas_start = Decimal(start_value_gas)
-            gas_consumption = gas_end - gas_start
-            gas_amount = gas_consumption * Decimal(str(tarif_gas))
+            end = Decimal(get_entry)
+            start = Decimal(start_value)
+            consumption = end - start
+            amount = consumption * Decimal(str(tariff))
 
-            # Проверяем, установлен ли чекбокс для газа
-            if box_gas_var.get() == 1:
-                gas_fee = gas_amount * Decimal(str(fee_gas))
+            # Проверяем, установлен ли чекбокс
+            if get_checkbox_var == 1:
+                fee = amount * Decimal(str(fee))
             else:
-                gas_fee = Decimal("0")
-
-            gas_total = gas_amount + gas_fee
+                fee = Decimal("0")
+            total = amount + fee
             return (
-                "Газ",
-                gas_start,
-                gas_end,
-                gas_consumption,
-                tarif_gas,
-                gas_amount,
-                gas_fee,
-                gas_total,
+                name,
+                start,
+                end,
+                consumption,
+                tariff,
+                amount,
+                fee,
+                total,
             )
         except InvalidOperation:
-            box.showerror("Ошибка", 'В поле "Газ" введите корректное число!')
+            box.showerror("Ошибка", "В поле " + name + "введите корректное число!")
             return
-
-
-# Добавляем функцию для расчета электричества
-def calculate_electricity():
-    # Обработка электричества
-    if enter_electricity.get().strip():
-        try:
-            elec_end = Decimal(enter_electricity.get())
-            elec_start = Decimal(start_value_electricity)
-            elec_consumption = elec_end - elec_start
-            elec_amount = elec_consumption * Decimal(str(tarif_electricity))
-
-            if box_electricity_var.get() == 1:
-                elec_fee = elec_amount * Decimal(str(fee_electricity))
-            else:
-                elec_fee = Decimal("0")
-
-            elec_total = elec_amount + elec_fee
-
-            return (
-                "Электричество",
-                elec_start,
-                elec_end,
-                elec_consumption,
-                tarif_electricity,
-                elec_amount,
-                elec_fee,
-                elec_total,
-            )
-        except InvalidOperation:
-            box.showerror("Ошибка", 'В поле "Электричество" введите корректное число!')
-            return
-
-
-# Добавляем функцию для расчета воды
-def calculate_water():
-    # Обработка воды
-    if enter_water.get().strip():
-        try:
-            water_end = Decimal(enter_water.get())
-            water_start = Decimal(start_value_water)
-            water_consumption = water_end - water_start
-            water_amount = water_consumption * Decimal(str(tarif_water))
-
-            if box_water_var.get() == 1:
-                water_fee = water_amount * Decimal(str(fee_water))
-            else:
-                water_fee = Decimal("0")
-
-            water_total = water_amount + water_fee
-
-            return (
-                "Вода",
-                water_start,
-                water_end,
-                water_consumption,
-                tarif_water,
-                water_amount,
-                water_fee,
-                water_total,
-            )
-        except InvalidOperation:
-            box.showerror("Ошибка", 'В поле "Вода" введите корректное число!')
-            return
+    else:
+        return None
 
 
 def calculate():
@@ -960,28 +894,46 @@ def calculate():
         costs = {}  # Словарь для стоимостей без комиссии
 
         # Обработка газа
-        resuslts_gas = (
-            calculate_gas()
-        )  # Это возвращаемый кортеж данных функции calculate_gas
-        results_data.append(resuslts_gas)
-        current_readings["gas"] = int(enter_gas.get())
-        costs["gas"] = resuslts_gas[5]
+        resuslts_gas = calculate_service(
+            "Газ",
+            enter_gas.get(),
+            start_value_gas,
+            tarif_gas,
+            box_gas_var.get(),
+            fee_gas,
+        )  # Это возвращаемый кортеж данных функции calculate_service для газа
+        if resuslts_gas is not None:
+            results_data.append(resuslts_gas)
+            current_readings["gas"] = int(enter_gas.get())
+            costs["gas"] = resuslts_gas[5]
 
         # Обработка электричества
-        results_electricity = (
-            calculate_electricity()
-        )  # Это возвращаемый кортеж функции calculate_electricity
-        results_data.append(results_electricity)
-        current_readings["electricity"] = int(enter_electricity.get())
-        costs["electricity"] = results_electricity[5]
+        results_electricity = calculate_service(
+            "Электричество",
+            enter_electricity.get(),
+            start_value_electricity,
+            tarif_electricity,
+            box_electricity_var.get(),
+            fee_electricity,
+        )  # Это возвращаемый кортеж функции calculate_service для электричества
+        if results_electricity is not None:
+            results_data.append(results_electricity)
+            current_readings["electricity"] = int(enter_electricity.get())
+            costs["electricity"] = results_electricity[5]
 
         # Обработка воды
-        resultrs_water = (
-            calculate_water()
-        )  # Это возвращаемый кортеж функции calculate_water
-        results_data.append(resultrs_water)
-        current_readings["water"] = int(enter_water.get())
-        costs["water"] = resultrs_water[5]
+        resultrs_water = calculate_service(
+            "Вода",
+            enter_water.get(),
+            start_value_water,
+            tarif_water,
+            box_water_var.get(),
+            fee_water,
+        )  # Это возвращаемый кортеж функции calculate_service для воды
+        if resultrs_water is not None:
+            results_data.append(resultrs_water)
+            current_readings["water"] = int(enter_water.get())
+            costs["water"] = resultrs_water[5]
 
         # Проверка, что хотя бы одно поле заполнено
         if not results_data:
