@@ -701,7 +701,14 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
     total_sum = Decimal("0")
 
     for data in results_data:
-        name, start, end, consumption, tarif, amount, fee_amount, total = data
+        name = data["Name"]
+        start = data["Start value"]
+        end = data["End value"]
+        consumption = data["Consumption"]
+        tarif = data["Tariff"]
+        amount = data["Amount"]
+        fee_amount = data["Fee"]
+        total = data["Total"]
 
         Label(results_window, text=name, relief="ridge", padx=10, pady=5).grid(
             row=row, column=0, sticky="nsew"
@@ -869,16 +876,16 @@ def calculate_service(name, get_entry, start_value, tariff, get_checkbox_var, fe
             else:
                 fee = Decimal("0")
             total = amount + fee
-            return (
-                name,
-                start,
-                end,
-                consumption,
-                tariff,
-                amount,
-                fee,
-                total,
-            )
+            return {
+                "Name": name,
+                "Start value": start,
+                "End value": end,
+                "Consumption": consumption,
+                "Tariff": tariff,
+                "Amount": amount,
+                "Fee": fee,
+                "Total": total,
+            }
         except InvalidOperation:
             box.showerror("Ошибка", "В поле " + name + "введите корректное число!")
             return
@@ -905,7 +912,7 @@ def calculate():
         if resuslts_gas is not None:
             results_data.append(resuslts_gas)
             current_readings["gas"] = int(enter_gas.get())
-            costs["gas"] = resuslts_gas[5]
+            costs["gas"] = resuslts_gas["Amount"]
 
         # Обработка электричества
         results_electricity = calculate_service(
@@ -919,7 +926,7 @@ def calculate():
         if results_electricity is not None:
             results_data.append(results_electricity)
             current_readings["electricity"] = int(enter_electricity.get())
-            costs["electricity"] = results_electricity[5]
+            costs["electricity"] = results_electricity["Amount"]
 
         # Обработка воды
         resultrs_water = calculate_service(
@@ -933,7 +940,7 @@ def calculate():
         if resultrs_water is not None:
             results_data.append(resultrs_water)
             current_readings["water"] = int(enter_water.get())
-            costs["water"] = resultrs_water[5]
+            costs["water"] = resultrs_water["Amount"]
 
         # Проверка, что хотя бы одно поле заполнено
         if not results_data:
@@ -941,7 +948,7 @@ def calculate():
             return
 
         # Вычисляем общую сумму с комиссией
-        total_with_fee = sum(data[7] for data in results_data)
+        total_with_fee = sum(data["Fee"] for data in results_data)
 
         # Показываем окно с результатами
         show_results_window(results_data, current_readings, costs, total_with_fee)
