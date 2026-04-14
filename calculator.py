@@ -1,6 +1,8 @@
 import tkinter.messagebox as box
 from decimal import Decimal, getcontext, InvalidOperation
 
+# Настройка точности Decimal
+getcontext().prec = 28
 
 # Создадим общую функцию для расчета
 def calculate_service(name, get_entry, start_value, tariff, get_checkbox_var, fee):
