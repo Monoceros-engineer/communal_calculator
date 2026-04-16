@@ -5,27 +5,12 @@ from decimal import Decimal
 from calculator import calculate_service
 from file_manager import load_settings, save_settings, save_readings_to_history
 from gui import show_results_window
-
-# Значения по умолчанию (будут перезаписаны при загрузке)
-start_value_gas = 25745
-start_value_electricity = 9838
-start_value_water = 502
-
-# Тарифы
-tarif_gas = 8.7
-tarif_electricity = 7.1
-tarif_water = 84.44
-
-# Комиссия банка (1% = 0.01)
-fee_gas = 0.01
-fee_electricity = 0.01
-fee_water = 0.01
+import config
 
 
 # Приветственное окно для первого запуска
 def show_welcome_window():
     """Показывает приветственное окно для ввода начальных значений"""
-    global start_value_gas, start_value_electricity, start_value_water
 
     welcome_window = Toplevel()
     welcome_window.title("Добро пожаловать!")
@@ -60,21 +45,21 @@ def show_welcome_window():
         row=0, column=0, padx=5, pady=5, sticky="e"
     )
     gas_entry = Entry(frame, width=20, font=("Arial", 10))
-    gas_entry.insert(0, str(start_value_gas))
+    gas_entry.insert(0, str(config.start_value_gas))
     gas_entry.grid(row=0, column=1, padx=5, pady=5)
 
     Label(frame, text="Электричество:", font=("Arial", 10)).grid(
         row=1, column=0, padx=5, pady=5, sticky="e"
     )
     electricity_entry = Entry(frame, width=20, font=("Arial", 10))
-    electricity_entry.insert(0, str(start_value_electricity))
+    electricity_entry.insert(0, str(config.start_value_electricity))
     electricity_entry.grid(row=1, column=1, padx=5, pady=5)
 
     Label(frame, text="Вода:", font=("Arial", 10)).grid(
         row=2, column=0, padx=5, pady=5, sticky="e"
     )
     water_entry = Entry(frame, width=20, font=("Arial", 10))
-    water_entry.insert(0, str(start_value_water))
+    water_entry.insert(0, str(config.start_value_water))
     water_entry.grid(row=2, column=1, padx=5, pady=5)
 
     # Подсказка
@@ -99,7 +84,6 @@ def show_welcome_window():
     def save_initial_settings():
         """Сохраняет начальные значения и закрывает окно"""
         nonlocal gas_entry, electricity_entry, water_entry
-        global start_value_gas, start_value_electricity, start_value_water
 
         try:
             # Получаем значения
@@ -113,9 +97,9 @@ def show_welcome_window():
                 return
 
             # Сохраняем значения
-            start_value_gas = new_gas
-            start_value_electricity = new_electricity
-            start_value_water = new_water
+            config.start_value_gas = new_gas
+            config.start_value_electricity = new_electricity
+            config.start_value_water = new_water
 
             # Сохраняем все настройки в файл
             save_settings()
@@ -172,9 +156,9 @@ else:
         lambda: box.showinfo(
             "Информация",
             f"Текущие начальные показания (предыдущий месяц):\n\n"
-            f"Газ: {start_value_gas}\n"
-            f"Электричество: {start_value_electricity}\n"
-            f"Вода: {start_value_water}\n\n"
+            f"Газ: {config.start_value_gas}\n"
+            f"Электричество: {config.start_value_electricity}\n"
+            f"Вода: {config.start_value_water}\n\n"
             f'Введите новые показания и нажмите "Рассчитать"',
         ),
     )
@@ -185,17 +169,17 @@ box_electricity_var = IntVar()
 box_water_var = IntVar()
 
 # СОЗДАЕМ ПЕРЕМЕННЫЕ ДЛЯ ТЕКСТА ЧЕКБОКСОВ
-box_gas_text = StringVar(value=f"{int(fee_gas * 100)}%")
-box_electricity_text = StringVar(value=f"{int(fee_electricity * 100)}%")
-box_water_text = StringVar(value=f"{int(fee_water * 100)}%")
+box_gas_text = StringVar(value=f"{int(config.fee_gas * 100)}%")
+box_electricity_text = StringVar(value=f"{int(config.fee_electricity * 100)}%")
+box_water_text = StringVar(value=f"{int(config.fee_water * 100)}%")
 
 
 # ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА ЧЕКБОКСОВ
 def update_checkbutton_texts():
     """Обновляет текст на чекбоксах в соответствии с текущими значениями комиссии"""
-    box_gas_text.set(f"{int(fee_gas * 100)}%")
-    box_electricity_text.set(f"{int(fee_electricity * 100)}%")
-    box_water_text.set(f"{int(fee_water * 100)}%")
+    box_gas_text.set(f"{int(config.fee_gas * 100)}%")
+    box_electricity_text.set(f"{int(config.fee_electricity * 100)}%")
+    box_water_text.set(f"{int(config.fee_water * 100)}%")
 
 
 # ФУНКЦИИ ДЛЯ НАСТРОЕК
@@ -251,7 +235,6 @@ def open_settings_window():
 
 def open_tarif_window():
     """Открывает окно редактирования тарифов"""
-    global tarif_gas, tarif_electricity, tarif_water
 
     tarif_window = Toplevel()
     tarif_window.title("Редактирование тарифов")
@@ -259,9 +242,9 @@ def open_tarif_window():
     tarif_window.grab_set()
 
     # Создаем переменные для редактирования
-    tarif_gas_var = StringVar(value=str(tarif_gas))
-    tarif_electricity_var = StringVar(value=str(tarif_electricity))
-    tarif_water_var = StringVar(value=str(tarif_water))
+    tarif_gas_var = StringVar(value=str(config.tarif_gas))
+    tarif_electricity_var = StringVar(value=str(config.tarif_electricity))
+    tarif_water_var = StringVar(value=str(config.tarif_water))
 
     # Заголовок
     Label(tarif_window, text="Редактирование тарифов", font=("Arial", 12, "bold")).grid(
@@ -292,7 +275,6 @@ def open_tarif_window():
     def apply_tarif_changes():
         """Применяет изменения тарифов"""
         nonlocal tarif_gas_var, tarif_electricity_var, tarif_water_var
-        global tarif_gas, tarif_electricity, tarif_water
 
         try:
             # Пробуем преобразовать введенные значения в float
@@ -306,9 +288,9 @@ def open_tarif_window():
                 return
 
             # Применяем изменения
-            tarif_gas = new_gas
-            tarif_electricity = new_electricity
-            tarif_water = new_water
+            config.tarif_gas = new_gas
+            config.tarif_electricity = new_electricity
+            config.tarif_water = new_water
 
             box.showinfo("Успех", "Тарифы успешно обновлены!")
             tarif_window.destroy()
@@ -339,7 +321,6 @@ def open_tarif_window():
 
 def open_fee_window():
     """Открывает окно редактирования комиссии"""
-    global fee_gas, fee_electricity, fee_water
 
     fee_window = Toplevel()
     fee_window.title("Редактирование комиссии")
@@ -347,9 +328,9 @@ def open_fee_window():
     fee_window.grab_set()
 
     # Создаем переменные для редактирования (умножаем на 100 для отображения в процентах)
-    fee_gas_var = StringVar(value=str(int(fee_gas * 100)))
-    fee_electricity_var = StringVar(value=str(int(fee_electricity * 100)))
-    fee_water_var = StringVar(value=str(int(fee_water * 100)))
+    fee_gas_var = StringVar(value=str(int(config.fee_gas * 100)))
+    fee_electricity_var = StringVar(value=str(int(config.fee_electricity * 100)))
+    fee_water_var = StringVar(value=str(int(config.fee_water * 100)))
 
     # Заголовок
     Label(
@@ -378,7 +359,6 @@ def open_fee_window():
     def apply_fee_changes():
         """Применяет изменения комиссии"""
         nonlocal fee_gas_var, fee_electricity_var, fee_water_var
-        global fee_gas, fee_electricity, fee_water
 
         try:
             # Пробуем преобразовать введенные значения в float
@@ -399,9 +379,9 @@ def open_fee_window():
                 return
 
             # Применяем изменения
-            fee_gas = new_gas
-            fee_electricity = new_electricity
-            fee_water = new_water
+            config.fee_gas = new_gas
+            config.fee_electricity = new_electricity
+            config.fee_water = new_water
 
             # Обновляем текст на чекбоксах
             update_checkbutton_texts()
@@ -431,7 +411,6 @@ def open_fee_window():
 
 def open_start_values_window():
     """Открывает окно редактирования начальных значений с предупреждением"""
-    global start_value_gas, start_value_electricity, start_value_water
 
     # Сначала показываем предупреждение
     box.showwarning(
@@ -446,9 +425,9 @@ def open_start_values_window():
     start_window.grab_set()
 
     # Создаем переменные для редактирования
-    start_gas_var = StringVar(value=str(start_value_gas))
-    start_electricity_var = StringVar(value=str(start_value_electricity))
-    start_water_var = StringVar(value=str(start_value_water))
+    start_gas_var = StringVar(value=str(config.start_value_gas))
+    start_electricity_var = StringVar(value=str(config.start_value_electricity))
+    start_water_var = StringVar(value=str(config.start_value_water))
 
     # Заголовок
     Label(
@@ -491,7 +470,6 @@ def open_start_values_window():
     def apply_start_changes():
         """Применяет изменения начальных значений с подтверждением"""
         nonlocal start_gas_var, start_electricity_var, start_water_var
-        global start_value_gas, start_value_electricity, start_value_water
 
         try:
             # Пробуем преобразовать введенные значения в int
@@ -511,9 +489,9 @@ def open_start_values_window():
                 "Подтверждение",
                 f"Вы уверены, что хотите изменить начальные значения?\n\n"
                 f"Было:\n"
-                f"Газ: {start_value_gas}\n"
-                f"Электричество: {start_value_electricity}\n"
-                f"Вода: {start_value_water}\n\n"
+                f"Газ: {config.start_value_gas}\n"
+                f"Электричество: {config.start_value_electricity}\n"
+                f"Вода: {config.start_value_water}\n\n"
                 f"Станет:\n"
                 f"Газ: {new_gas}\n"
                 f"Электричество: {new_electricity}\n"
@@ -522,9 +500,9 @@ def open_start_values_window():
 
             if confirm:
                 # Применяем изменения
-                start_value_gas = new_gas
-                start_value_electricity = new_electricity
-                start_value_water = new_water
+                config.start_value_gas = new_gas
+                config.start_value_electricity = new_electricity
+                config.start_value_water = new_water
 
                 box.showinfo("Успех", "Начальные значения успешно обновлены!")
                 start_window.destroy()
@@ -572,10 +550,10 @@ def calculate():
         resuslts_gas = calculate_service(
             "Газ",
             enter_gas.get(),
-            start_value_gas,
-            tarif_gas,
+            config.start_value_gas,
+            config.tarif_gas,
             box_gas_var.get(),
-            fee_gas,
+            config.fee_gas,
         )  # Это возвращаемый кортеж данных функции calculate_service для газа
         if resuslts_gas is not None:
             results_data.append(resuslts_gas)
@@ -586,10 +564,10 @@ def calculate():
         results_electricity = calculate_service(
             "Электричество",
             enter_electricity.get(),
-            start_value_electricity,
-            tarif_electricity,
+            config.start_value_electricity,
+            config.tarif_electricity,
             box_electricity_var.get(),
-            fee_electricity,
+            config.fee_electricity,
         )  # Это возвращаемый кортеж функции calculate_service для электричества
         if results_electricity is not None:
             results_data.append(results_electricity)
@@ -600,10 +578,10 @@ def calculate():
         resultrs_water = calculate_service(
             "Вода",
             enter_water.get(),
-            start_value_water,
-            tarif_water,
+            config.start_value_water,
+            config.tarif_water,
             box_water_var.get(),
-            fee_water,
+            config.fee_water,
         )  # Это возвращаемый кортеж функции calculate_service для воды
         if resultrs_water is not None:
             results_data.append(resultrs_water)
@@ -644,8 +622,8 @@ info_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
 
 Label(
     info_frame,
-    text=f"Начальные показания (предыдущий месяц): Газ: {start_value_gas} | "
-    f"Электричество: {start_value_electricity} | Вода: {start_value_water}",
+    text=f"Начальные показания (предыдущий месяц): Газ: {config.start_value_gas} | "
+    f"Электричество: {config.start_value_electricity} | Вода: {config.start_value_water}",
     font=("Arial", 9),
     bg="lightyellow",
     fg="darkblue",
