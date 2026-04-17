@@ -3,6 +3,7 @@ import tkinter.messagebox as box
 from decimal import Decimal
 from file_manager import save_readings_to_history, save_settings
 import config
+from datetime import datetime
 
 # Приветственное окно для первого запуска
 def show_welcome_window():
@@ -77,6 +78,7 @@ def show_welcome_window():
         justify=LEFT,
     ).pack(pady=10)
 
+
     def save_initial_settings():
         """Сохраняет начальные значения и закрывает окно"""
         nonlocal gas_entry, electricity_entry, water_entry
@@ -132,6 +134,134 @@ def show_welcome_window():
         font=("Arial", 10),
     ).pack(pady=5)
 
+#Создаем главное окно
+def create_main_window(calculate_func, is_first_run):
+    window = Tk()
+    window.title("Калькулятор коммуналки")
+    window.geometry("500x350")
+
+    # Если это первый запуск, показываем приветственное окно
+    if is_first_run:
+        # Показываем приветственное окно после загрузки главного окна
+        window.after(100, show_welcome_window)
+    else:
+        # Если это не первый запуск, показываем подсказку с текущими начальными значениями
+        window.after(
+            100,
+            lambda: box.showinfo(
+                "Информация",
+                f"Текущие начальные показания (предыдущий месяц):\n\n"
+                f"Газ: {config.start_value_gas}\n"
+                f"Электричество: {config.start_value_electricity}\n"
+                f"Вода: {config.start_value_water}\n\n"
+                f'Введите новые показания и нажмите "Рассчитать"',
+            ),
+        )
+
+    # СОЗДАЕМ ПЕРЕМЕННЫЕ ДЛЯ ЧЕКБОКСОВ (до функций)
+    box_gas_var = IntVar()  # 0 - не отмечен, 1 - отмечен
+    box_electricity_var = IntVar()
+    box_water_var = IntVar()
+
+    # СОЗДАЕМ ПЕРЕМЕННЫЕ ДЛЯ ТЕКСТА ЧЕКБОКСОВ
+    box_gas_text = StringVar(value=f"{int(config.fee_gas * 100)}%")
+    box_electricity_text = StringVar(value=f"{int(config.fee_electricity * 100)}%")
+    box_water_text = StringVar(value=f"{int(config.fee_water * 100)}%")
+
+    # ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА ЧЕКБОКСОВ
+    def update_checkbutton_texts():
+        """Обновляет текст на чекбоксах в соответствии с текущими значениями комиссии"""
+        box_gas_text.set(f"{int(config.fee_gas * 100)}%")
+        box_electricity_text.set(f"{int(config.fee_electricity * 100)}%")
+        box_water_text.set(f"{int(config.fee_water * 100)}%")
+
+    # СОЗДАНИЕ ИНТЕРФЕЙСА
+
+    # Верхняя панель с датой и кнопкой настроек
+    current_date = datetime.now().strftime("%d.%m.%Y")
+    label_date = Label(window, text=f"Сегодня: {current_date}", font=("Arial", 10))
+    label_date.grid(row=0, column=0, padx=10, pady=10, sticky="w")
+
+    # Кнопка настроек (теперь вызывает open_settings_window)
+    btn_settings = Button(
+        window, text="Настройки", bg="lightgray", command=lambda: open_settings_window(update_checkbutton_texts)
+    )
+    btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
+
+    # Отображение текущих начальных значений (для информации)
+    info_frame = Frame(window, bg="lightyellow", relief="ridge", bd=1)
+    info_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
+
+    Label(
+        info_frame,
+        text=f"Начальные показания (предыдущий месяц): Газ: {config.start_value_gas} | "
+        f"Электричество: {config.start_value_electricity} | Вода: {config.start_value_water}",
+        font=("Arial", 9),
+        bg="lightyellow",
+        fg="darkblue",
+    ).pack(pady=2)
+
+    # Заголовки колонок
+    Label(window, text="Ресурс", font=("Arial", 10, "bold")).grid(
+        row=1, column=0, padx=5, pady=5
+    )
+    Label(window, text="Показания", font=("Arial", 10, "bold")).grid(
+        row=1, column=1, padx=5, pady=5
+    )
+    Label(window, text="Комиссия", font=("Arial", 10, "bold")).grid(
+        row=1, column=2, padx=5, pady=5
+    )
+
+    # Строка для газа
+    label_gas = Label(window, text="Газ")
+    label_gas.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+
+    enter_gas = Entry(window, width=20)
+    enter_gas.grid(row=2, column=1, padx=5, pady=5)
+
+    # Важно: привязываем переменную к чекбоксу и используем textvariable для динамического текста
+    box_gas = Checkbutton(window, textvariable=box_gas_text, variable=box_gas_var)
+    box_gas.grid(row=2, column=2, padx=5, pady=5)
+
+    # Строка для электричества
+    label_electricity = Label(window, text="Электричество")
+    label_electricity.grid(row=3, column=0, padx=5, pady=5, sticky="w")
+
+    enter_electricity = Entry(window, width=20)
+    enter_electricity.grid(row=3, column=1, padx=5, pady=5)
+
+    box_electricity = Checkbutton(
+        window, textvariable=box_electricity_text, variable=box_electricity_var
+    )
+    box_electricity.grid(row=3, column=2, padx=5, pady=5)
+
+    # Строка для воды
+    label_water = Label(window, text="Вода")
+    label_water.grid(row=4, column=0, padx=5, pady=5, sticky="w")
+
+    enter_water = Entry(window, width=20)
+    enter_water.grid(row=4, column=1, padx=5, pady=5)
+
+    box_water = Checkbutton(window, textvariable=box_water_text, variable=box_water_var)
+    box_water.grid(row=4, column=2, padx=5, pady=5)
+
+    # Кнопка расчета
+    btn_check = Button(
+        window,
+        text="Рассчитать",
+        command=lambda: calculate_func(enter_gas, enter_electricity, enter_water,
+                                        box_gas_var, box_electricity_var, box_water_var,
+                                        config.start_value_gas, config.start_value_electricity, config.start_value_water,
+                                        config.tarif_gas, config.tarif_electricity, config.tarif_water,
+                                        config.fee_gas, config.fee_electricity, config.fee_water),
+        bg="lightblue",
+        font=("Arial", 12),
+        width=20,
+    )
+    btn_check.grid(row=5, column=0, columnspan=3, pady=20)
+
+    return window
+
 #Создаем функцию, открывающую окно настроек
 def open_settings_window(update_func):
     """Открывает главное окно настроек"""
@@ -179,6 +309,7 @@ def open_settings_window(update_func):
         font=("Arial", 11),
         width=20,
     ).pack(pady=20)
+
 
 def open_tarif_window():
     """Открывает окно редактирования тарифов"""
