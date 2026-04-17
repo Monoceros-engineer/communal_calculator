@@ -132,6 +132,54 @@ def show_welcome_window():
         font=("Arial", 10),
     ).pack(pady=5)
 
+#Создаем функцию, открывающую окно настроек
+def open_settings_window(update_func):
+    """Открывает главное окно настроек"""
+    settings_window = Toplevel()
+    settings_window.title("Настройки")
+    settings_window.geometry("300x250")
+    settings_window.grab_set()  # Блокирует главное окно пока открыты настройки
+
+    Label(settings_window, text="Выберите категорию:", font=("Arial", 12, "bold")).pack(
+        pady=20
+    )
+
+    Button(
+        settings_window,
+        text="Тарифы",
+        command=open_tarif_window,
+        bg="lightblue",
+        font=("Arial", 11),
+        width=20,
+    ).pack(pady=5)
+
+    Button(
+        settings_window,
+        text="Комиссия",
+        command=lambda: open_fee_window(update_func),
+        bg="lightblue",
+        font=("Arial", 11),
+        width=20,
+    ).pack(pady=5)
+
+    Button(
+        settings_window,
+        text="Начальные настройки",
+        command=open_start_values_window,
+        bg="lightblue",
+        font=("Arial", 11),
+        width=20,
+    ).pack(pady=5)
+
+    Button(
+        settings_window,
+        text="Закрыть",
+        command=settings_window.destroy,
+        bg="lightcoral",
+        font=("Arial", 11),
+        width=20,
+    ).pack(pady=20)
+
 def open_tarif_window():
     """Открывает окно редактирования тарифов"""
 

@@ -6,10 +6,8 @@ from file_manager import load_settings
 from gui import (
     show_results_window,
     show_welcome_window,
-    open_tarif_window,
-    open_fee_window,
-    open_start_values_window,
-)
+    open_settings_window,
+    )
 import config
 
 
@@ -56,57 +54,6 @@ def update_checkbutton_texts():
     box_gas_text.set(f"{int(config.fee_gas * 100)}%")
     box_electricity_text.set(f"{int(config.fee_electricity * 100)}%")
     box_water_text.set(f"{int(config.fee_water * 100)}%")
-
-
-# ФУНКЦИИ ДЛЯ НАСТРОЕК
-
-
-def open_settings_window():
-    """Открывает главное окно настроек"""
-    settings_window = Toplevel()
-    settings_window.title("Настройки")
-    settings_window.geometry("300x250")
-    settings_window.grab_set()  # Блокирует главное окно пока открыты настройки
-
-    Label(settings_window, text="Выберите категорию:", font=("Arial", 12, "bold")).pack(
-        pady=20
-    )
-
-    Button(
-        settings_window,
-        text="Тарифы",
-        command=open_tarif_window,
-        bg="lightblue",
-        font=("Arial", 11),
-        width=20,
-    ).pack(pady=5)
-
-    Button(
-        settings_window,
-        text="Комиссия",
-        command=lambda: open_fee_window(update_checkbutton_texts),
-        bg="lightblue",
-        font=("Arial", 11),
-        width=20,
-    ).pack(pady=5)
-
-    Button(
-        settings_window,
-        text="Начальные настройки",
-        command=open_start_values_window,
-        bg="lightblue",
-        font=("Arial", 11),
-        width=20,
-    ).pack(pady=5)
-
-    Button(
-        settings_window,
-        text="Закрыть",
-        command=settings_window.destroy,
-        bg="lightcoral",
-        font=("Arial", 11),
-        width=20,
-    ).pack(pady=20)
 
 
 # ФУНКЦИИ ДЛЯ ОСНОВНОГО РАСЧЕТА
@@ -185,7 +132,7 @@ label_date.grid(row=0, column=0, padx=10, pady=10, sticky="w")
 
 # Кнопка настроек (теперь вызывает open_settings_window)
 btn_settings = Button(
-    window, text="Настройки", bg="lightgray", command=open_settings_window
+    window, text="Настройки", bg="lightgray", command=lambda: open_settings_window(update_checkbutton_texts)
 )
 btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
 
