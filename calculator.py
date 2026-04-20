@@ -29,6 +29,6 @@ def calculate_service(name, get_entry, start_value, tariff, get_checkbox_var, fe
                 "Total": total,
             }
         except InvalidOperation:
-            return None
+            raise ValueError(f"В поле '{name}' введите корректное число!")
     else:
         return None

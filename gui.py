@@ -253,7 +253,7 @@ def create_main_window(calculate_func, is_first_run):
                                         box_gas_var, box_electricity_var, box_water_var,
                                         config.start_value_gas, config.start_value_electricity, config.start_value_water,
                                         config.tarif_gas, config.tarif_electricity, config.tarif_water,
-                                        config.fee_gas, config.fee_electricity, config.fee_water),
+                                        config.fee_gas, config.fee_electricity, config.fee_water, show_warning, show_error),
         bg="lightblue",
         font=("Arial", 12),
         width=20,
@@ -804,3 +804,10 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
     # Настройка растяжения колонок
     for col in range(8):
         results_window.grid_columnconfigure(col, weight=1)
+
+#Прописываем функции сообщений об ошибках
+def show_warning(title, message):
+    box.showwarning(title, message)
+
+def show_error(title, message):
+    box.showerror(title, message)

@@ -1,5 +1,3 @@
-from tkinter import *
-import tkinter.messagebox as box
 from calculator import calculate_service
 from gui import show_results_window
 
@@ -9,7 +7,7 @@ def calculate(enter_gas, enter_electricity, enter_water,
               box_gas_var, box_electricity_var, box_water_var,
               start_value_gas, start_value_electricity, start_value_water,
               tarif_gas, tarif_electricity, tarif_water,
-              fee_gas, fee_electricity, fee_water):
+              fee_gas, fee_electricity, fee_water, warning_callback, error_callback):
     """Основная функция расчета"""
     try:
         results_data = []  # Список для хранения данных по каждой позиции
@@ -29,7 +27,7 @@ def calculate(enter_gas, enter_electricity, enter_water,
             results_data.append(resuslts_gas)
             current_readings["gas"] = int(enter_gas.get())
             costs["gas"] = resuslts_gas["Amount"]
-
+        
         # Обработка электричества
         results_electricity = calculate_service(
             "Электричество",
@@ -60,7 +58,7 @@ def calculate(enter_gas, enter_electricity, enter_water,
 
         # Проверка, что хотя бы одно поле заполнено
         if not results_data:
-            box.showwarning("Предупреждение", "Заполните хотя бы одно поле!")
+            warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
             return
 
         # Вычисляем общую сумму с комиссией
@@ -69,5 +67,9 @@ def calculate(enter_gas, enter_electricity, enter_water,
         # Показываем окно с результатами
         show_results_window(results_data, current_readings, costs, total_with_fee)
 
+    except ValueError as e:
+        error_callback("Ошибка", str(e))
+        return
+
     except Exception as e:
-        box.showerror("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
+        error_callback("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
