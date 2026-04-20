@@ -1,4 +1,3 @@
-import tkinter.messagebox as box
 from decimal import Decimal, getcontext, InvalidOperation
 
 # Настройка точности Decimal
@@ -30,7 +29,6 @@ def calculate_service(name, get_entry, start_value, tariff, get_checkbox_var, fe
                 "Total": total,
             }
         except InvalidOperation:
-            box.showerror("Ошибка", "В поле " + name + "введите корректное число!")
-            return
+            return None
     else:
         return None
