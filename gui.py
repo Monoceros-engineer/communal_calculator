@@ -12,6 +12,7 @@ def show_welcome_window():
     welcome_window = Toplevel()
     welcome_window.title("Добро пожаловать!")
     welcome_window.geometry("400x350")
+    welcome_window.resizable(0,0)
     welcome_window.grab_set()  # Блокирует главное окно
 
     # Заголовок
@@ -138,7 +139,7 @@ def show_welcome_window():
 def create_main_window(calculate_func, is_first_run):
     window = Tk()
     window.title("Калькулятор коммуналки")
-    window.geometry("500x350")
+    window.resizable(0,0)
 
     # Если это первый запуск, показываем приветственное окно
     if is_first_run:
@@ -150,7 +151,7 @@ def create_main_window(calculate_func, is_first_run):
             100,
             lambda: box.showinfo(
                 "Информация",
-                f"Текущие начальные показания (предыдущий месяц):\n\n"
+                f"В прошлом месяце показанивя ваших счетчиков были:\n\n"
                 f"Газ: {config.start_value_gas}\n"
                 f"Электричество: {config.start_value_electricity}\n"
                 f"Вода: {config.start_value_water}\n\n"
@@ -191,15 +192,6 @@ def create_main_window(calculate_func, is_first_run):
     # Отображение текущих начальных значений (для информации)
     info_frame = Frame(window, bg="lightyellow", relief="ridge", bd=1)
     info_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
-
-    Label(
-        info_frame,
-        text=f"Начальные показания (предыдущий месяц): Газ: {config.start_value_gas} | "
-        f"Электричество: {config.start_value_electricity} | Вода: {config.start_value_water}",
-        font=("Arial", 9),
-        bg="lightyellow",
-        fg="darkblue",
-    ).pack(pady=2)
 
     # Заголовки колонок
     Label(window, text="Ресурс", font=("Arial", 10, "bold")).grid(
@@ -260,6 +252,9 @@ def create_main_window(calculate_func, is_first_run):
     )
     btn_check.grid(row=5, column=0, columnspan=3, pady=20)
 
+    for col in range(3):
+        window.grid_columnconfigure(col, weight=0, minsize=100)
+
     return window
 
 #Создаем функцию, открывающую окно настроек
@@ -268,6 +263,7 @@ def open_settings_window(update_func):
     settings_window = Toplevel()
     settings_window.title("Настройки")
     settings_window.geometry("300x250")
+    settings_window.resizable(0,0)
     settings_window.grab_set()  # Блокирует главное окно пока открыты настройки
 
     Label(settings_window, text="Выберите категорию:", font=("Arial", 12, "bold")).pack(
@@ -317,6 +313,7 @@ def open_tarif_window():
     tarif_window = Toplevel()
     tarif_window.title("Редактирование тарифов")
     tarif_window.geometry("350x250")
+    tarif_window.resizable(0,0)
     tarif_window.grab_set()
 
     # Создаем переменные для редактирования
@@ -402,6 +399,7 @@ def open_fee_window(update_func):
     fee_window = Toplevel()
     fee_window.title("Редактирование комиссии")
     fee_window.geometry("350x250")
+    fee_window.resizable(0,0)
     fee_window.grab_set()
 
     # Создаем переменные для редактирования (умножаем на 100 для отображения в процентах)
@@ -498,6 +496,7 @@ def open_start_values_window():
     start_window = Toplevel()
     start_window.title("Редактирование начальных значений")
     start_window.geometry("350x300")
+    start_window.resizable(0,0)
     start_window.grab_set()
 
     # Создаем переменные для редактирования
@@ -616,7 +615,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
     """Создает окно с результатами в виде таблицы и предлагает обновить начальные значения"""
     results_window = Toplevel()
     results_window.title("Результаты расчета")
-    results_window.geometry("1200x450")
+    results_window.resizable(0,0)
 
     # Заголовки таблицы
     headers = [
@@ -627,7 +626,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
         "Тариф",
         "Сумма",
         "Комиссия",
-        "Итого",
+        "Итого с учетом комиссии",
     ]
     for col, header in enumerate(headers):
         Label(
@@ -644,6 +643,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
     # Данные по каждой позиции
     row = 1
     total_sum = Decimal("0")
+    total_sum_fith_fee= Decimal("0")
 
     for data in results_data:
         name = data["Name"]
@@ -700,6 +700,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
 
         total_sum += amount
         row += 1
+        total_sum_fith_fee += total
 
     # Итоговая строка (если больше одного ресурса)
     if len(results_data) > 1:
@@ -717,7 +718,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
             pady=5,
             font=("Arial", 10, "bold"),
             bg="lightyellow",
-        ).grid(row=row, column=5, sticky="nsew")
+        ).grid(row=row, column=0, sticky="nsew")
         Label(
             results_window,
             text=f"{total_sum:.2f}",
@@ -726,10 +727,20 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
             pady=5,
             font=("Arial", 10, "bold"),
             bg="lightyellow",
-        ).grid(row=row, column=6, sticky="nsew")
+        ).grid(row=row, column=5, sticky="nsew")
         Label(
             results_window,
             text=f"{total_with_fee:.2f}",
+            relief="ridge",
+            padx=10,
+            pady=5,
+            font=("Arial", 10, "bold"),
+            bg="lightyellow",
+            fg="blue",
+        ).grid(row=row, column=6, sticky="nsew")
+        Label(
+            results_window,
+            text=f"{total_sum_fith_fee:.2f}",
             relief="ridge",
             padx=10,
             pady=5,
@@ -756,7 +767,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
         bg="lightblue",
         fg="darkblue",
     ).pack(pady=5)
-
+    
     def save_and_close():
         """Сохраняет показания в историю, обновляет начальные значения и закрывает окно"""
         save_readings_to_history(current_readings, costs, total_with_fee)
@@ -802,8 +813,9 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
     ).pack(side=LEFT, padx=5)
 
     # Настройка растяжения колонок
-    for col in range(8):
-        results_window.grid_columnconfigure(col, weight=1)
+    col_widths = [80, 20, 20, 20, 20, 100, 100, 200]  # подбираем ширину ячеек
+    for col, width in enumerate(col_widths):
+        results_window.grid_columnconfigure(col, minsize=width, weight=0)
 
 #Прописываем функции сообщений об ошибках
 def show_warning(title, message):
