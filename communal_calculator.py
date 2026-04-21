@@ -1,5 +1,31 @@
 from calculator import calculate_service
 from gui import show_results_window
+import config
+from file_manager import save_settings, save_readings_to_history
+
+def get_start_values():
+    """Возвращает словарь с начальными показаниями."""
+    return {
+        "gas": config.start_value_gas,
+        "electricity": config.start_value_electricity,
+        "water": config.start_value_water
+    }
+
+def get_tariffs():
+    """Возвращает словарь с текущими тарифами."""
+    return {
+        "gas": config.tarif_gas,
+        "electricity": config.tarif_electricity,
+        "water": config.tarif_water
+    }
+
+def get_fees():
+    """Возвращает словарь с текущими комиссиями."""
+    return {
+        "gas": config.fee_gas,
+        "electricity": config.fee_electricity,
+        "water": config.fee_water
+    }
 
 # ФУНКЦИИ ДЛЯ ОСНОВНОГО РАСЧЕТА
 
@@ -62,10 +88,13 @@ def calculate(enter_gas, enter_electricity, enter_water,
             return
 
         # Вычисляем общую сумму с комиссией
-        total_with_fee = sum(data["Fee"] for data in results_data)
+        total_amount=sum(data["Amount"] for data in results_data)
+        total_fee = sum(data["Fee"] for data in results_data)
+        total_sum_with_fee = sum(data["Total"] for data in results_data)
+
 
         # Показываем окно с результатами
-        show_results_window(results_data, current_readings, costs, total_with_fee)
+        show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, save_readings)
 
     except ValueError as e:
         error_callback("Ошибка", str(e))
@@ -73,3 +102,28 @@ def calculate(enter_gas, enter_electricity, enter_water,
 
     except Exception as e:
         error_callback("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
+
+def save_readings(current_readings, costs, total_sum_with_fee):
+    """Сохраняет показания в историю, обновляет начальные значения."""
+    save_readings_to_history(current_readings, costs, total_sum_with_fee)
+
+def save_initial_settings(gas, electricity, water):
+    """Сохраняет начальные показания."""
+    config.start_value_gas = gas
+    config.start_value_electricity = electricity
+    config.start_value_water = water
+    save_settings()  
+
+def save_tariffs(gas, electricity, water):
+    """Сохраняет тарифы и записывает в файл."""
+    config.tarif_gas = gas
+    config.tarif_electricity = electricity
+    config.tarif_water = water
+    save_settings()      
+
+def save_fees(gas, electricity, water):
+    """Сохраняет комиссии и записывает в файл."""
+    config.fee_gas = gas
+    config.fee_electricity = electricity
+    config.fee_water = water
+    save_settings()

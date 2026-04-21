@@ -1,9 +1,16 @@
 from file_manager import load_settings
 from gui import create_main_window
-from communal_calculator import calculate
+from communal_calculator import (
+    calculate, save_initial_settings, get_start_values,
+    get_tariffs, save_tariffs, get_fees, save_fees
+)
 
 if __name__ == "__main__":
-    # Загружаем настройки при запуске
     is_first_run = not load_settings()
-    window = create_main_window(calculate, is_first_run)
+    start_values = get_start_values()
+    tariffs = get_tariffs()
+    fees = get_fees()
+    window = create_main_window(
+    calculate, is_first_run, start_values, save_initial_settings,
+    tariffs, save_tariffs, get_fees, save_fees)
     window.mainloop()

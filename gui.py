@@ -1,12 +1,9 @@
 from tkinter import *
 import tkinter.messagebox as box
-from decimal import Decimal
-from file_manager import save_readings_to_history, save_settings
-import config
 from datetime import datetime
 
 # Приветственное окно для первого запуска
-def show_welcome_window():
+def show_welcome_window(start_values, on_save):
     """Показывает приветственное окно для ввода начальных значений"""
 
     welcome_window = Toplevel()
@@ -43,21 +40,21 @@ def show_welcome_window():
         row=0, column=0, padx=5, pady=5, sticky="e"
     )
     gas_entry = Entry(frame, width=20, font=("Arial", 10))
-    gas_entry.insert(0, str(config.start_value_gas))
+    gas_entry.insert(0, str(start_values['gas']))
     gas_entry.grid(row=0, column=1, padx=5, pady=5)
 
     Label(frame, text="Электричество:", font=("Arial", 10)).grid(
         row=1, column=0, padx=5, pady=5, sticky="e"
     )
     electricity_entry = Entry(frame, width=20, font=("Arial", 10))
-    electricity_entry.insert(0, str(config.start_value_electricity))
+    electricity_entry.insert(0, str(start_values['electricity']))
     electricity_entry.grid(row=1, column=1, padx=5, pady=5)
 
     Label(frame, text="Вода:", font=("Arial", 10)).grid(
         row=2, column=0, padx=5, pady=5, sticky="e"
     )
     water_entry = Entry(frame, width=20, font=("Arial", 10))
-    water_entry.insert(0, str(config.start_value_water))
+    water_entry.insert(0, str(start_values['water']))
     water_entry.grid(row=2, column=1, padx=5, pady=5)
 
     # Подсказка
@@ -95,13 +92,8 @@ def show_welcome_window():
                 box.showerror("Ошибка", "Значения должны быть неотрицательными!")
                 return
 
-            # Сохраняем значения
-            config.start_value_gas = new_gas
-            config.start_value_electricity = new_electricity
-            config.start_value_water = new_water
-
-            # Сохраняем все настройки в файл
-            save_settings()
+            # Сохраняем значения и все настройки в файл
+            on_save(new_gas, new_electricity, new_water)
 
             # Показываем сообщение об успехе
             box.showinfo(
@@ -127,16 +119,29 @@ def show_welcome_window():
         width=20,
     ).pack(pady=15)
 
+    def reset_to_default():
+        # Устанавливаем значения по умолчанию в поля ввода
+        gas_entry.delete(0, END)
+        gas_entry.insert(0, str(start_values["gas"]))
+        electricity_entry.delete(0, END)
+        electricity_entry.insert(0, str(start_values["electricity"]))
+        water_entry.delete(0, END)
+        water_entry.insert(0, str(start_values["water"]))
+        # Сохраняем значения по умолчанию через callback
+        on_save(start_values["gas"], start_values["electricity"], start_values["water"])
+        welcome_window.destroy()
+
     Button(
         welcome_window,
         text="Использовать значения по умолчанию",
-        command=lambda: [save_settings(), welcome_window.destroy()],
+        command=reset_to_default,
         bg="lightgray",
         font=("Arial", 10),
     ).pack(pady=5)
 
 #Создаем главное окно
-def create_main_window(calculate_func, is_first_run):
+def create_main_window(calculate_func, is_first_run, start_values, save_initial_callback,
+                       tariffs, save_tariffs_callback, get_fees_callback, save_fees_callback):
     window = Tk()
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
@@ -144,7 +149,7 @@ def create_main_window(calculate_func, is_first_run):
     # Если это первый запуск, показываем приветственное окно
     if is_first_run:
         # Показываем приветственное окно после загрузки главного окна
-        window.after(100, show_welcome_window)
+        window.after(100, lambda: show_welcome_window(start_values, save_initial_callback))
     else:
         # Если это не первый запуск, показываем подсказку с текущими начальными значениями
         window.after(
@@ -152,9 +157,9 @@ def create_main_window(calculate_func, is_first_run):
             lambda: box.showinfo(
                 "Информация",
                 f"В прошлом месяце показанивя ваших счетчиков были:\n\n"
-                f"Газ: {config.start_value_gas}\n"
-                f"Электричество: {config.start_value_electricity}\n"
-                f"Вода: {config.start_value_water}\n\n"
+                f"Газ: {start_values['gas']}\n"
+                f"Электричество: {start_values['electricity']}\n"
+                f"Вода: {start_values['water']}\n\n"
                 f'Введите новые показания и нажмите "Рассчитать"',
             ),
         )
@@ -165,16 +170,17 @@ def create_main_window(calculate_func, is_first_run):
     box_water_var = IntVar()
 
     # СОЗДАЕМ ПЕРЕМЕННЫЕ ДЛЯ ТЕКСТА ЧЕКБОКСОВ
-    box_gas_text = StringVar(value=f"{int(config.fee_gas * 100)}%")
-    box_electricity_text = StringVar(value=f"{int(config.fee_electricity * 100)}%")
-    box_water_text = StringVar(value=f"{int(config.fee_water * 100)}%")
+    fees = get_fees_callback()
+    box_gas_text = StringVar(value=f"{int(fees['gas'] * 100)}%")
+    box_electricity_text = StringVar(value=f"{int(fees['electricity'] * 100)}%")
+    box_water_text = StringVar(value=f"{int(fees['water'] * 100)}%")
 
     # ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА ЧЕКБОКСОВ
     def update_checkbutton_texts():
-        """Обновляет текст на чекбоксах в соответствии с текущими значениями комиссии"""
-        box_gas_text.set(f"{int(config.fee_gas * 100)}%")
-        box_electricity_text.set(f"{int(config.fee_electricity * 100)}%")
-        box_water_text.set(f"{int(config.fee_water * 100)}%")
+        fees = get_fees_callback()
+        box_gas_text.set(f"{int(fees['gas'] * 100)}%")
+        box_electricity_text.set(f"{int(fees['electricity'] * 100)}%")
+        box_water_text.set(f"{int(fees['water'] * 100)}%")
 
     # СОЗДАНИЕ ИНТЕРФЕЙСА
 
@@ -185,8 +191,12 @@ def create_main_window(calculate_func, is_first_run):
 
     # Кнопка настроек (теперь вызывает open_settings_window)
     btn_settings = Button(
-        window, text="Настройки", bg="lightgray", command=lambda: open_settings_window(update_checkbutton_texts)
-    )
+    window, text="Настройки", bg="lightgray",
+    command=lambda: open_settings_window(tariffs, save_tariffs_callback,
+    get_fees_callback, save_fees_callback,
+    start_values, save_initial_callback,
+    update_checkbutton_texts))
+
     btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
 
     # Отображение текущих начальных значений (для информации)
@@ -243,9 +253,9 @@ def create_main_window(calculate_func, is_first_run):
         text="Рассчитать",
         command=lambda: calculate_func(enter_gas, enter_electricity, enter_water,
                                         box_gas_var, box_electricity_var, box_water_var,
-                                        config.start_value_gas, config.start_value_electricity, config.start_value_water,
-                                        config.tarif_gas, config.tarif_electricity, config.tarif_water,
-                                        config.fee_gas, config.fee_electricity, config.fee_water, show_warning, show_error),
+                                        start_values['gas'], start_values['electricity'], start_values['water'],
+                                        tariffs['gas'], tariffs['electricity'], tariffs['water'],
+                                        fees['gas'], fees['electricity'], fees['water'], show_warning, show_error),
         bg="lightblue",
         font=("Arial", 12),
         width=20,
@@ -258,7 +268,7 @@ def create_main_window(calculate_func, is_first_run):
     return window
 
 #Создаем функцию, открывающую окно настроек
-def open_settings_window(update_func):
+def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, start_values, save_start_callback, update_fees_callback):
     """Открывает главное окно настроек"""
     settings_window = Toplevel()
     settings_window.title("Настройки")
@@ -273,7 +283,7 @@ def open_settings_window(update_func):
     Button(
         settings_window,
         text="Тарифы",
-        command=open_tarif_window,
+        command=lambda: open_tarif_window(tariffs, save_tariffs_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -282,7 +292,7 @@ def open_settings_window(update_func):
     Button(
         settings_window,
         text="Комиссия",
-        command=lambda: open_fee_window(update_func),
+        command=lambda: open_fee_window(fees, save_fees_callback, update_fees_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -291,7 +301,7 @@ def open_settings_window(update_func):
     Button(
         settings_window,
         text="Начальные настройки",
-        command=open_start_values_window,
+        command=lambda: open_start_values_window(start_values, save_start_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -307,7 +317,7 @@ def open_settings_window(update_func):
     ).pack(pady=20)
 
 
-def open_tarif_window():
+def open_tarif_window(current_tariffs, on_save):
     """Открывает окно редактирования тарифов"""
 
     tarif_window = Toplevel()
@@ -317,9 +327,9 @@ def open_tarif_window():
     tarif_window.grab_set()
 
     # Создаем переменные для редактирования
-    tarif_gas_var = StringVar(value=str(config.tarif_gas))
-    tarif_electricity_var = StringVar(value=str(config.tarif_electricity))
-    tarif_water_var = StringVar(value=str(config.tarif_water))
+    tarif_gas_var = StringVar(value=str(current_tariffs['gas']))
+    tarif_electricity_var = StringVar(value=str(current_tariffs['electricity']))
+    tarif_water_var = StringVar(value=str(current_tariffs['water']))
 
     # Заголовок
     Label(tarif_window, text="Редактирование тарифов", font=("Arial", 12, "bold")).grid(
@@ -363,9 +373,7 @@ def open_tarif_window():
                 return
 
             # Применяем изменения
-            config.tarif_gas = new_gas
-            config.tarif_electricity = new_electricity
-            config.tarif_water = new_water
+            on_save(new_gas, new_electricity, new_water)
 
             box.showinfo("Успех", "Тарифы успешно обновлены!")
             tarif_window.destroy()
@@ -393,7 +401,7 @@ def open_tarif_window():
         width=10,
     ).grid(row=4, column=1, pady=20)
 
-def open_fee_window(update_func):
+def open_fee_window(current_fees, on_save, update_callback):
     """Открывает окно редактирования комиссии"""
 
     fee_window = Toplevel()
@@ -403,9 +411,9 @@ def open_fee_window(update_func):
     fee_window.grab_set()
 
     # Создаем переменные для редактирования (умножаем на 100 для отображения в процентах)
-    fee_gas_var = StringVar(value=str(int(config.fee_gas * 100)))
-    fee_electricity_var = StringVar(value=str(int(config.fee_electricity * 100)))
-    fee_water_var = StringVar(value=str(int(config.fee_water * 100)))
+    fee_gas_var = StringVar(value=str(int(current_fees["gas"] * 100)))
+    fee_electricity_var = StringVar(value=str(int(current_fees["electricity"] * 100)))
+    fee_water_var = StringVar(value=str(int(current_fees["water"] * 100)))
 
     # Заголовок
     Label(
@@ -454,12 +462,10 @@ def open_fee_window(update_func):
                 return
 
             # Применяем изменения
-            config.fee_gas = new_gas
-            config.fee_electricity = new_electricity
-            config.fee_water = new_water
+            on_save(new_gas, new_electricity, new_water)
 
             # Обновляем текст на чекбоксах
-            update_func()
+            update_callback()
 
             box.showinfo("Успех", "Комиссия успешно обновлена!")
             fee_window.destroy()
@@ -483,7 +489,7 @@ def open_fee_window(update_func):
         fee_window, text="Отмена", command=cancel_fee_changes, bg="lightcoral", width=10
     ).grid(row=4, column=1, pady=20)
 
-def open_start_values_window():
+def open_start_values_window(current_start_values, on_save):
     """Открывает окно редактирования начальных значений с предупреждением"""
 
     # Сначала показываем предупреждение
@@ -500,9 +506,9 @@ def open_start_values_window():
     start_window.grab_set()
 
     # Создаем переменные для редактирования
-    start_gas_var = StringVar(value=str(config.start_value_gas))
-    start_electricity_var = StringVar(value=str(config.start_value_electricity))
-    start_water_var = StringVar(value=str(config.start_value_water))
+    start_gas_var = StringVar(value=str(current_start_values['gas']))
+    start_electricity_var = StringVar(value=str(current_start_values['electricity']))
+    start_water_var = StringVar(value=str(current_start_values['water']))
 
     # Заголовок
     Label(
@@ -564,9 +570,9 @@ def open_start_values_window():
                 "Подтверждение",
                 f"Вы уверены, что хотите изменить начальные значения?\n\n"
                 f"Было:\n"
-                f"Газ: {config.start_value_gas}\n"
-                f"Электричество: {config.start_value_electricity}\n"
-                f"Вода: {config.start_value_water}\n\n"
+                f"Газ: {current_start_values['gas']}\n"
+                f"Электричество: {current_start_values['electricity']}\n"
+                f"Вода: {current_start_values['water']}\n\n"
                 f"Станет:\n"
                 f"Газ: {new_gas}\n"
                 f"Электричество: {new_electricity}\n"
@@ -575,9 +581,7 @@ def open_start_values_window():
 
             if confirm:
                 # Применяем изменения
-                config.start_value_gas = new_gas
-                config.start_value_electricity = new_electricity
-                config.start_value_water = new_water
+                on_save(new_gas, new_electricity, new_water)
 
                 box.showinfo("Успех", "Начальные значения успешно обновлены!")
                 start_window.destroy()
@@ -611,7 +615,7 @@ def open_start_values_window():
     ).grid(row=5, column=1, pady=20) 
 
 
-def show_results_window(results_data, current_readings, costs, total_with_fee):
+def show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, on_save):
     """Создает окно с результатами в виде таблицы и предлагает обновить начальные значения"""
     results_window = Toplevel()
     results_window.title("Результаты расчета")
@@ -640,11 +644,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
             width=12,
         ).grid(row=0, column=col, sticky="nsew")
 
-    # Данные по каждой позиции
-    row = 1
-    total_sum = Decimal("0")
-    total_sum_fith_fee= Decimal("0")
-
+    row=1    
     for data in results_data:
         name = data["Name"]
         start = data["Start value"]
@@ -674,6 +674,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
             results_window, text=f"{amount:.2f}", relief="ridge", padx=10, pady=5
         ).grid(row=row, column=5, sticky="nsew")
 
+
         # Показываем комиссию только если она применялась
         if fee_amount > 0:
             Label(
@@ -697,10 +698,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
             font=("Arial", 10, "bold"),
             fg="green",
         ).grid(row=row, column=7, sticky="nsew")
-
-        total_sum += amount
         row += 1
-        total_sum_fith_fee += total
 
     # Итоговая строка (если больше одного ресурса)
     if len(results_data) > 1:
@@ -721,7 +719,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
         ).grid(row=row, column=0, sticky="nsew")
         Label(
             results_window,
-            text=f"{total_sum:.2f}",
+            text=f"{total_amount:.2f}",
             relief="ridge",
             padx=10,
             pady=5,
@@ -730,7 +728,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
         ).grid(row=row, column=5, sticky="nsew")
         Label(
             results_window,
-            text=f"{total_with_fee:.2f}",
+            text=f"{total_fee:.2f}",
             relief="ridge",
             padx=10,
             pady=5,
@@ -740,7 +738,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
         ).grid(row=row, column=6, sticky="nsew")
         Label(
             results_window,
-            text=f"{total_sum_fith_fee:.2f}",
+            text=f"{total_sum_with_fee:.2f}",
             relief="ridge",
             padx=10,
             pady=5,
@@ -770,7 +768,7 @@ def show_results_window(results_data, current_readings, costs, total_with_fee):
     
     def save_and_close():
         """Сохраняет показания в историю, обновляет начальные значения и закрывает окно"""
-        save_readings_to_history(current_readings, costs, total_with_fee)
+        on_save(current_readings, costs, total_sum_with_fee)
         box.showinfo(
             "Готово",
             f"Показания сохранены!\n\n"

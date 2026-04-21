@@ -59,7 +59,7 @@ def save_settings():
     except:
         return False
     
-def save_readings_to_history(current_readings, costs, total):
+def save_readings_to_history(current_readings, costs, total_sum_with_fee):
     """Сохраняет текущие показания в историю и обновляет начальные значения"""
     global start_value_gas, start_value_electricity, start_value_water
 
@@ -85,7 +85,7 @@ def save_readings_to_history(current_readings, costs, total):
             "electricity": float(costs["electricity"]),
             "water": float(costs["water"]),
         },
-        "total": float(total),
+        "total": float(total_sum_with_fee),
     }
 
     history.append(record)
