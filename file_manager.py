@@ -1,5 +1,6 @@
 import os
 import json
+import config
 from datetime import datetime
 
 # Файлы для хранения настроек и истории
@@ -9,52 +10,29 @@ HISTORY_FILE = "readings_history.json"
 
 # Функции для работы с настройками
 def load_settings():
-    """Загружает настройки из файла"""
-    global start_value_gas, start_value_electricity, start_value_water
-    global tarif_gas, tarif_electricity, tarif_water
-    global fee_gas, fee_electricity, fee_water
-
+    """Загружает настройки из файла в config.services"""
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                settings = json.load(f)
-
-            start_value_gas = settings.get("start_value_gas", 25745)
-            start_value_electricity = settings.get("start_value_electricity", 9838)
-            start_value_water = settings.get("start_value_water", 502)
-
-            tarif_gas = settings.get("tarif_gas", 8.7)
-            tarif_electricity = settings.get("tarif_electricity", 7.1)
-            tarif_water = settings.get("tarif_water", 84.44)
-
-            fee_gas = settings.get("fee_gas", 0.01)
-            fee_electricity = settings.get("fee_electricity", 0.01)
-            fee_water = settings.get("fee_water", 0.01)
-
-            return True  # Настройки загружены
+                data = json.load(f)
+            # Ожидаем, что в файле лежит словарь services
+            if "services" in data:
+                config.services = data["services"]
+            else:
+                # Если файл старого формата, можно попробовать сконвертировать, но пока просто игнорируем
+                pass
+            return True
         except:
-            return False  # Ошибка загрузки
+            return False
     else:
-        return False  # Файл не найден - первый запуск
-
+        return False
 
 def save_settings():
-    """Сохраняет настройки в файл"""
-    settings = {
-        "start_value_gas": start_value_gas,
-        "start_value_electricity": start_value_electricity,
-        "start_value_water": start_value_water,
-        "tarif_gas": tarif_gas,
-        "tarif_electricity": tarif_electricity,
-        "tarif_water": tarif_water,
-        "fee_gas": fee_gas,
-        "fee_electricity": fee_electricity,
-        "fee_water": fee_water,
-    }
-
+    """Сохраняет настройки из config.services в файл"""
+    data = {"services": config.services}
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, ensure_ascii=False, indent=4)
+            json.dump(data, f, ensure_ascii=False, indent=4)
         return True
     except:
         return False

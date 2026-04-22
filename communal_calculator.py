@@ -6,25 +6,25 @@ from file_manager import save_settings, save_readings_to_history
 def get_start_values():
     """Возвращает словарь с начальными показаниями."""
     return {
-        "gas": config.start_value_gas,
-        "electricity": config.start_value_electricity,
-        "water": config.start_value_water
+        "gas": config.services["gas"]["start_value"],
+        "electricity": config.services["electricity"]["start_value"],
+        "water": config.services["water"]["start_value"]
     }
 
 def get_tariffs():
     """Возвращает словарь с текущими тарифами."""
     return {
-        "gas": config.tarif_gas,
-        "electricity": config.tarif_electricity,
-        "water": config.tarif_water
+        "gas": config.services["gas"]["tariff"],
+        "electricity": config.services["electricity"]["tariff"],
+        "water": config.services["water"]["tariff"]
     }
 
 def get_fees():
     """Возвращает словарь с текущими комиссиями."""
     return {
-        "gas": config.fee_gas,
-        "electricity": config.fee_electricity,
-        "water": config.fee_water
+        "gas": config.services["gas"]["fee"],
+        "electricity": config.services["electricity"]["fee"],
+        "water": config.services["water"]["fee"]
     }
 
 # ФУНКЦИИ ДЛЯ ОСНОВНОГО РАСЧЕТА
@@ -109,21 +109,21 @@ def save_readings(current_readings, costs, total_sum_with_fee):
 
 def save_initial_settings(gas, electricity, water):
     """Сохраняет начальные показания."""
-    config.start_value_gas = gas
-    config.start_value_electricity = electricity
-    config.start_value_water = water
+    config.services["gas"]["start_value"] = gas
+    config.services["electricity"]["start_value"] = electricity
+    config.services["water"]["start_value"] = water
     save_settings()  
 
 def save_tariffs(gas, electricity, water):
     """Сохраняет тарифы и записывает в файл."""
-    config.tarif_gas = gas
-    config.tarif_electricity = electricity
-    config.tarif_water = water
+    config.services["gas"]["tariff"] = gas
+    config.services["electricity"]["tariff"] = electricity
+    config.services["water"]["tariff"] = water
     save_settings()      
 
 def save_fees(gas, electricity, water):
     """Сохраняет комиссии и записывает в файл."""
-    config.fee_gas = gas
-    config.fee_electricity = electricity
-    config.fee_water = water
+    config.services["gas"]["fee"] = gas
+    config.services["electricity"]["fee"] = electricity
+    config.services["water"]["fee"] = water
     save_settings()
