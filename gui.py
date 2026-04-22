@@ -141,7 +141,7 @@ def show_welcome_window(start_values, on_save):
 
 #Создаем главное окно
 def create_main_window(calculate_func, is_first_run, start_values, save_initial_callback,
-                       tariffs, save_tariffs_callback, get_fees_callback, save_fees_callback):
+                       tariffs, save_tariffs_callback, get_fees_callback, save_fees_callback, services):
     window = Tk()
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
@@ -193,9 +193,10 @@ def create_main_window(calculate_func, is_first_run, start_values, save_initial_
     btn_settings = Button(
     window, text="Настройки", bg="lightgray",
     command=lambda: open_settings_window(tariffs, save_tariffs_callback,
-    get_fees_callback, save_fees_callback,
+    fees, save_fees_callback,
     start_values, save_initial_callback,
-    update_checkbutton_texts))
+    update_checkbutton_texts,
+    services))
 
     btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
 
@@ -268,11 +269,12 @@ def create_main_window(calculate_func, is_first_run, start_values, save_initial_
     return window
 
 #Создаем функцию, открывающую окно настроек
-def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, start_values, save_start_callback, update_fees_callback):
+def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, start_values, 
+                         save_start_callback, update_fees_callback, services):
     """Открывает главное окно настроек"""
     settings_window = Toplevel()
     settings_window.title("Настройки")
-    settings_window.geometry("300x250")
+    settings_window.geometry("300x350")
     settings_window.resizable(0,0)
     settings_window.grab_set()  # Блокирует главное окно пока открыты настройки
 
@@ -309,6 +311,15 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
 
     Button(
         settings_window,
+        text="Управление услугами",
+        command=lambda: open_manage_services_window(services),
+        bg="lightblue",
+        font=("Arial", 11),
+        width=20,
+    ).pack(pady=5)
+
+    Button(
+        settings_window,
         text="Закрыть",
         command=settings_window.destroy,
         bg="lightcoral",
@@ -316,7 +327,7 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
         width=20,
     ).pack(pady=20)
 
-
+   
 def open_tarif_window(current_tariffs, on_save):
     """Открывает окно редактирования тарифов"""
 
@@ -614,6 +625,31 @@ def open_start_values_window(current_start_values, on_save):
         width=10,
     ).grid(row=5, column=1, pady=20) 
 
+
+def open_manage_services_window(services):
+    """Открывает окно для просмотра и управления услугами (пока только просмотр)"""
+    win = Toplevel()
+    win.title("Управление услугами")
+    win.geometry("500x400")
+    win.resizable(0,0)
+
+    Label(win, text="Список услуг", font=("Arial", 12, "bold")).pack(pady=10)
+
+    frame = Frame(win)
+    frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
+
+    scrollbar = Scrollbar(frame)
+    scrollbar.pack(side=RIGHT, fill=Y)
+
+    listbox = Listbox(frame, yscrollcommand=scrollbar.set, font=("Arial", 10))
+    listbox.pack(fill=BOTH, expand=True)
+    scrollbar.config(command=listbox.yview)
+
+    for key, data in services.items():
+        display_text = f"{data['name']} ({key}) - Тип: {data['type']}, Вкл: {data['enabled']}"
+        listbox.insert(END, display_text)
+
+    Button(win, text="Закрыть", command=win.destroy, bg="lightgray", width=15).pack(pady=10)
 
 def show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, on_save):
     """Создает окно с результатами в виде таблицы и предлагает обновить начальные значения"""

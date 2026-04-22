@@ -3,6 +3,10 @@ from gui import show_results_window
 import config
 from file_manager import save_settings, save_readings_to_history
 
+def get_services():
+    """Возвращает словарь services со всеми параметрами."""
+    return config.services
+
 def get_start_values():
     """Возвращает словарь с начальными показаниями."""
     return {
