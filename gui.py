@@ -147,123 +147,84 @@ def create_main_window(calculate_func, is_first_run, start_values, save_initial_
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
 
-    # Если это первый запуск, показываем приветственное окно
+    # Приветственное окно или подсказка (пока оставляем статичную, позже сделаем динамической)
     if is_first_run:
-        # Показываем приветственное окно после загрузки главного окна
         window.after(100, lambda: show_welcome_window(start_values, save_initial_callback))
     else:
-        # Если это не первый запуск, показываем подсказку с текущими начальными значениями
-        window.after(
-            100,
-            lambda: box.showinfo(
-                "Информация",
-                f"В прошлом месяце показанивя ваших счетчиков были:\n\n"
-                f"Газ: {start_values['gas']}\n"
-                f"Электричество: {start_values['electricity']}\n"
-                f"Вода: {start_values['water']}\n\n"
-                f'Введите новые показания и нажмите "Рассчитать"',
-            ),
-        )
+        # Формируем сообщение из начальных значений всех metered услуг
+        msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
+        for key, srv in services.items():
+            if srv.get("enabled") and srv["type"] == "metered" and "start_value" in srv:
+                msg_lines.append(f"{srv['name']}: {srv['start_value']}")
+        msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
+        window.after(100, lambda: box.showinfo("Информация", msg))
 
-    # СОЗДАЕМ ПЕРЕМЕННЫЕ ДЛЯ ЧЕКБОКСОВ (до функций)
-    box_gas_var = IntVar()  # 0 - не отмечен, 1 - отмечен
-    box_electricity_var = IntVar()
-    box_water_var = IntVar()
+    # Словари для виджетов
+    entries = {}
+    checkboxes = {}
+    checkbox_texts = {}
 
-    # СОЗДАЕМ ПЕРЕМЕННЫЕ ДЛЯ ТЕКСТА ЧЕКБОКСОВ
-    fees = get_fees_callback()
-    box_gas_text = StringVar(value=f"{int(fees['gas'] * 100)}%")
-    box_electricity_text = StringVar(value=f"{int(fees['electricity'] * 100)}%")
-    box_water_text = StringVar(value=f"{int(fees['water'] * 100)}%")
-
-    # ФУНКЦИЯ ДЛЯ ОБНОВЛЕНИЯ ТЕКСТА ЧЕКБОКСОВ
+    # Функция обновления текста чекбоксов (будет вызываться после изменения комиссий)
     def update_checkbutton_texts():
-        fees = get_fees_callback()
-        box_gas_text.set(f"{int(fees['gas'] * 100)}%")
-        box_electricity_text.set(f"{int(fees['electricity'] * 100)}%")
-        box_water_text.set(f"{int(fees['water'] * 100)}%")
+        # Для простоты пока не обновляем динамически, заглушка
+        pass
 
-    # СОЗДАНИЕ ИНТЕРФЕЙСА
-
-    # Верхняя панель с датой и кнопкой настроек
+    # Верхняя панель
     current_date = datetime.now().strftime("%d.%m.%Y")
     label_date = Label(window, text=f"Сегодня: {current_date}", font=("Arial", 10))
     label_date.grid(row=0, column=0, padx=10, pady=10, sticky="w")
 
-    # Кнопка настроек (теперь вызывает open_settings_window)
     btn_settings = Button(
-    window, text="Настройки", bg="lightgray",
-    command=lambda: open_settings_window(tariffs, save_tariffs_callback,
-    get_fees_callback, save_fees_callback,
-    update_checkbutton_texts,
-    services,
-    save_services_callback))
-
+        window, text="Настройки", bg="lightgray",
+        command=lambda: open_settings_window(
+            tariffs, save_tariffs_callback,
+            get_fees_callback, save_fees_callback,
+            update_checkbutton_texts,
+            services, save_services_callback
+        )
+    )
     btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
 
-    # Отображение текущих начальных значений (для информации)
-    info_frame = Frame(window, bg="lightyellow", relief="ridge", bd=1)
-    info_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
-
     # Заголовки колонок
-    Label(window, text="Ресурс", font=("Arial", 10, "bold")).grid(
-        row=1, column=0, padx=5, pady=5
-    )
-    Label(window, text="Показания", font=("Arial", 10, "bold")).grid(
-        row=1, column=1, padx=5, pady=5
-    )
-    Label(window, text="Комиссия", font=("Arial", 10, "bold")).grid(
-        row=1, column=2, padx=5, pady=5
-    )
+    Label(window, text="Ресурс", font=("Arial", 10, "bold")).grid(row=1, column=0, padx=5, pady=5)
+    Label(window, text="Показания", font=("Arial", 10, "bold")).grid(row=1, column=1, padx=5, pady=5)
+    Label(window, text="Комиссия", font=("Arial", 10, "bold")).grid(row=1, column=2, padx=5, pady=5)
 
-    # Строка для газа
-    label_gas = Label(window, text="Газ")
-    label_gas.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+    # Динамическое создание строк для включённых услуг
+    row_idx = 2
+    for key, service in services.items():
+        if not service.get("enabled", True):
+            continue
+        # Название
+        Label(window, text=service["name"], font=("Arial", 10)).grid(row=row_idx, column=0, padx=5, pady=5, sticky="w")
+        # Поле ввода (только для metered)
+        if service["type"] == "metered":
+            entry = Entry(window, width=20)
+            entry.grid(row=row_idx, column=1, padx=5, pady=5)
+            entries[key] = entry
+        else:
+            # Для фиксированных показываем прочерк
+            Label(window, text="—", width=20, relief="ridge").grid(row=row_idx, column=1, padx=5, pady=5)
+        # Чекбокс комиссии
+        var = IntVar()
+        textvar = StringVar(value=f"{int(service['fee']*100)}%")
+        checkboxes[key] = var
+        checkbox_texts[key] = textvar
+        Checkbutton(window, textvariable=textvar, variable=var).grid(row=row_idx, column=2, padx=5, pady=5)
+        row_idx += 1
 
-    enter_gas = Entry(window, width=20)
-    enter_gas.grid(row=2, column=1, padx=5, pady=5)
-
-    # Важно: привязываем переменную к чекбоксу и используем textvariable для динамического текста
-    box_gas = Checkbutton(window, textvariable=box_gas_text, variable=box_gas_var)
-    box_gas.grid(row=2, column=2, padx=5, pady=5)
-
-    # Строка для электричества
-    label_electricity = Label(window, text="Электричество")
-    label_electricity.grid(row=3, column=0, padx=5, pady=5, sticky="w")
-
-    enter_electricity = Entry(window, width=20)
-    enter_electricity.grid(row=3, column=1, padx=5, pady=5)
-
-    box_electricity = Checkbutton(
-        window, textvariable=box_electricity_text, variable=box_electricity_var
-    )
-    box_electricity.grid(row=3, column=2, padx=5, pady=5)
-
-    # Строка для воды
-    label_water = Label(window, text="Вода")
-    label_water.grid(row=4, column=0, padx=5, pady=5, sticky="w")
-
-    enter_water = Entry(window, width=20)
-    enter_water.grid(row=4, column=1, padx=5, pady=5)
-
-    box_water = Checkbutton(window, textvariable=box_water_text, variable=box_water_var)
-    box_water.grid(row=4, column=2, padx=5, pady=5)
-
-    # Кнопка расчета
+    # Кнопка расчёта 
     btn_check = Button(
-        window,
-        text="Рассчитать",
-        command=lambda: calculate_func(enter_gas, enter_electricity, enter_water,
-                                        box_gas_var, box_electricity_var, box_water_var,
-                                        start_values['gas'], start_values['electricity'], start_values['water'],
-                                        tariffs['gas'], tariffs['electricity'], tariffs['water'],
-                                        fees['gas'], fees['electricity'], fees['water'], show_warning, show_error),
-        bg="lightblue",
-        font=("Arial", 12),
-        width=20,
-    )
-    btn_check.grid(row=5, column=0, columnspan=3, pady=20)
+    window,
+    text="Рассчитать",
+    command=lambda: calculate_func(entries, checkboxes, services, show_warning, show_error, save_services_callback),
+    bg="lightblue",
+    font=("Arial", 12),
+    width=20,
+)
+    btn_check.grid(row=row_idx, column=0, columnspan=3, pady=20)
 
+    # Настройка колонок
     for col in range(3):
         window.grid_columnconfigure(col, weight=0, minsize=100)
 
@@ -319,177 +280,116 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
     ).pack(pady=20)
 
    
-def open_tarif_window(current_tariffs, on_save):
-    """Открывает окно редактирования тарифов"""
+def open_tarif_window(services, current_tariffs, on_save):
+    """Открывает окно редактирования тарифов для всех услуг"""
+    win = Toplevel()
+    win.title("Редактирование тарифов")
+    win.geometry("400x400")
+    win.resizable(0,0)
+    win.grab_set()
 
-    tarif_window = Toplevel()
-    tarif_window.title("Редактирование тарифов")
-    tarif_window.geometry("350x250")
-    tarif_window.resizable(0,0)
-    tarif_window.grab_set()
+    # Рамка с прокруткой (на случай, если услуг много)
+    canvas = Canvas(win, borderwidth=0)
+    scrollbar = Scrollbar(win, orient="vertical", command=canvas.yview)
+    scrollable_frame = Frame(canvas)
 
-    # Создаем переменные для редактирования
-    tarif_gas_var = StringVar(value=str(current_tariffs['gas']))
-    tarif_electricity_var = StringVar(value=str(current_tariffs['electricity']))
-    tarif_water_var = StringVar(value=str(current_tariffs['water']))
-
-    # Заголовок
-    Label(tarif_window, text="Редактирование тарифов", font=("Arial", 12, "bold")).grid(
-        row=0, column=0, columnspan=2, pady=10
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
     )
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
 
-    # Поля ввода
-    Label(tarif_window, text="Газ (руб.):").grid(
-        row=1, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_gas = Entry(tarif_window, textvariable=tarif_gas_var, width=15)
-    entry_gas.grid(row=1, column=1, padx=10, pady=5)
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
 
-    Label(tarif_window, text="Электричество (руб.):").grid(
-        row=2, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_electricity = Entry(
-        tarif_window, textvariable=tarif_electricity_var, width=15
-    )
-    entry_electricity.grid(row=2, column=1, padx=10, pady=5)
+    Label(scrollable_frame, text="Редактирование тарифов", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
 
-    Label(tarif_window, text="Вода (руб.):").grid(
-        row=3, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_water = Entry(tarif_window, textvariable=tarif_water_var, width=15)
-    entry_water.grid(row=3, column=1, padx=10, pady=5)
+    # Словарь для хранения переменных
+    vars = {}
+    row = 1
+    for key, service in services.items():
+        if not service.get("enabled", True):
+            continue  # показываем только включённые услуги (или можно все)
+        name = service["name"]
+        tariff = current_tariffs.get(key, service.get("tariff", 0.0))
+        Label(scrollable_frame, text=f"{name}:", font=("Arial", 10)).grid(row=row, column=0, padx=10, pady=5, sticky="e")
+        var = StringVar(value=str(tariff))
+        Entry(scrollable_frame, textvariable=var, width=15).grid(row=row, column=1, padx=10, pady=5)
+        vars[key] = var
+        row += 1
 
-    def apply_tarif_changes():
-        """Применяет изменения тарифов"""
-        nonlocal tarif_gas_var, tarif_electricity_var, tarif_water_var
-
+    def save_tariffs():
+        new_tariffs = {}
         try:
-            # Пробуем преобразовать введенные значения в float
-            new_gas = float(tarif_gas_var.get())
-            new_electricity = float(tarif_electricity_var.get())
-            new_water = float(tarif_water_var.get())
-
-            # Проверяем, что значения положительные
-            if new_gas <= 0 or new_electricity <= 0 or new_water <= 0:
-                box.showerror("Ошибка", "Тарифы должны быть положительными числами!")
-                return
-
-            # Применяем изменения
-            on_save(new_gas, new_electricity, new_water)
-
-            box.showinfo("Успех", "Тарифы успешно обновлены!")
-            tarif_window.destroy()
-
+            for key, var in vars.items():
+                val = float(var.get())
+                if val <= 0:
+                    raise ValueError
+                new_tariffs[key] = val
+            on_save(new_tariffs)   # on_save должна сохранить новые тарифы в config и перезаписать файл
+            box.showinfo("Успех", "Тарифы обновлены")
+            win.destroy()
         except ValueError:
-            box.showerror("Ошибка", "Введите корректные числа!")
+            box.showerror("Ошибка", "Тарифы должны быть положительными числами")
 
-    def cancel_tarif_changes():
-        """Отменяет изменения и закрывает окно"""
-        tarif_window.destroy()
+    Button(scrollable_frame, text="Сохранить", command=save_tariffs, bg="lightgreen", width=10).grid(row=row, column=0, pady=20)
+    Button(scrollable_frame, text="Отмена", command=win.destroy, bg="lightcoral", width=10).grid(row=row, column=1, pady=20)
 
-    # Кнопки
-    Button(
-        tarif_window,
-        text="Применить",
-        command=apply_tarif_changes,
-        bg="lightgreen",
-        width=10,
-    ).grid(row=4, column=0, pady=20)
-    Button(
-        tarif_window,
-        text="Отмена",
-        command=cancel_tarif_changes,
-        bg="lightcoral",
-        width=10,
-    ).grid(row=4, column=1, pady=20)
+def open_fee_window(services, save_fees_callback, update_callback):
+    """Открывает окно редактирования комиссии для всех услуг"""
+    win = Toplevel()
+    win.title("Редактирование комиссии")
+    win.geometry("400x400")
+    win.resizable(0,0)
+    win.grab_set()
 
-def open_fee_window(current_fees, on_save, update_callback):
-    """Открывает окно редактирования комиссии"""
+    canvas = Canvas(win, borderwidth=0)
+    scrollbar = Scrollbar(win, orient="vertical", command=canvas.yview)
+    scrollable_frame = Frame(canvas)
 
-    fee_window = Toplevel()
-    fee_window.title("Редактирование комиссии")
-    fee_window.geometry("350x250")
-    fee_window.resizable(0,0)
-    fee_window.grab_set()
-
-    # Создаем переменные для редактирования (умножаем на 100 для отображения в процентах)
-    fee_gas_var = StringVar(value=str(int(current_fees["gas"] * 100)))
-    fee_electricity_var = StringVar(value=str(int(current_fees["electricity"] * 100)))
-    fee_water_var = StringVar(value=str(int(current_fees["water"] * 100)))
-
-    # Заголовок
-    Label(
-        fee_window, text="Редактирование комиссии банка", font=("Arial", 12, "bold")
-    ).grid(row=0, column=0, columnspan=2, pady=10)
-
-    # Поля ввода
-    Label(fee_window, text="Газ (%):").grid(
-        row=1, column=0, padx=10, pady=5, sticky="e"
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
     )
-    entry_gas = Entry(fee_window, textvariable=fee_gas_var, width=15)
-    entry_gas.grid(row=1, column=1, padx=10, pady=5)
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
 
-    Label(fee_window, text="Электричество (%):").grid(
-        row=2, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_electricity = Entry(fee_window, textvariable=fee_electricity_var, width=15)
-    entry_electricity.grid(row=2, column=1, padx=10, pady=5)
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
 
-    Label(fee_window, text="Вода (%):").grid(
-        row=3, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_water = Entry(fee_window, textvariable=fee_water_var, width=15)
-    entry_water.grid(row=3, column=1, padx=10, pady=5)
+    Label(scrollable_frame, text="Редактирование комиссии банка", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
 
-    def apply_fee_changes():
-        """Применяет изменения комиссии"""
-        nonlocal fee_gas_var, fee_electricity_var, fee_water_var
+    vars = {}
+    row = 1
+    for key, service in services.items():
+        if not service.get("enabled", True):
+            continue
+        name = service["name"]
+        fee_percent = int(service.get("fee", 0.0) * 100)
+        Label(scrollable_frame, text=f"{name} (%):", font=("Arial", 10)).grid(row=row, column=0, padx=10, pady=5, sticky="e")
+        var = StringVar(value=str(fee_percent))
+        Entry(scrollable_frame, textvariable=var, width=15).grid(row=row, column=1, padx=10, pady=5)
+        vars[key] = var
+        row += 1
 
+    def save_fee_changes():
+        new_fees = {}
         try:
-            # Пробуем преобразовать введенные значения в float
-            new_gas = float(fee_gas_var.get()) / 100  # Переводим проценты в коэффициент
-            new_electricity = float(fee_electricity_var.get()) / 100
-            new_water = float(fee_water_var.get()) / 100
-
-            # Проверяем, что значения в допустимом диапазоне
-            if (
-                new_gas < 0
-                or new_electricity < 0
-                or new_water < 0
-                or new_gas > 1
-                or new_electricity > 1
-                or new_water > 1
-            ):
-                box.showerror("Ошибка", "Комиссия должна быть от 0% до 100%!")
-                return
-
-            # Применяем изменения
-            on_save(new_gas, new_electricity, new_water)
-
-            # Обновляем текст на чекбоксах
-            update_callback()
-
+            for key, var in vars.items():
+                val = float(var.get())
+                if val < 0 or val > 100:
+                    raise ValueError
+                new_fees[key] = val / 100.0
+            save_fees_callback(new_fees)
+            update_callback()   # обновить текст чекбоксов
             box.showinfo("Успех", "Комиссия успешно обновлена!")
-            fee_window.destroy()
-
+            win.destroy()
         except ValueError:
-            box.showerror("Ошибка", "Введите корректные числа!")
+            box.showerror("Ошибка", "Комиссия должна быть от 0% до 100%")
 
-    def cancel_fee_changes():
-        """Отменяет изменения и закрывает окно"""
-        fee_window.destroy()
-
-    # Кнопки
-    Button(
-        fee_window,
-        text="Применить",
-        command=apply_fee_changes,
-        bg="lightgreen",
-        width=10,
-    ).grid(row=4, column=0, pady=20)
-    Button(
-        fee_window, text="Отмена", command=cancel_fee_changes, bg="lightcoral", width=10
-    ).grid(row=4, column=1, pady=20)
+    Button(scrollable_frame, text="Сохранить", command=save_fee_changes, bg="lightgreen", width=10).grid(row=row, column=0, pady=20)
+    Button(scrollable_frame, text="Отмена", command=win.destroy, bg="lightcoral", width=10).grid(row=row, column=1, pady=20)
 
 def open_manage_services_window(services, save_callback):
     win = Toplevel()
@@ -606,7 +506,7 @@ def open_manage_services_window(services, save_callback):
 
 
 
-def show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, on_save):
+def show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, on_save, services):
     """Создает окно с результатами в виде таблицы и предлагает обновить начальные значения"""
     results_window = Toplevel()
     results_window.title("Результаты расчета")
@@ -758,16 +658,13 @@ def show_results_window(results_data, current_readings, costs, total_amount, tot
     ).pack(pady=5)
     
     def save_and_close():
-        """Сохраняет показания в историю, обновляет начальные значения и закрывает окно"""
         on_save(current_readings, costs, total_sum_with_fee)
-        box.showinfo(
-            "Готово",
-            f"Показания сохранены!\n\n"
-            f"Новые начальные значения для следующего месяца:\n"
-            f'Газ: {current_readings["gas"]}\n'
-            f'Электричество: {current_readings["electricity"]}\n'
-            f'Вода: {current_readings["water"]}',
-        )
+        msg_lines = ["Новые начальные значения для следующего месяца:"]
+        for key, reading in current_readings.items():
+            service_name = services.get(key, {}).get("name", key)
+            msg_lines.append(f"{service_name}: {reading}")
+        msg = "\n".join(msg_lines)
+        box.showinfo("Готово", f"Показания сохранены!\n\n{msg}")
         results_window.destroy()
 
     def close_without_saving():

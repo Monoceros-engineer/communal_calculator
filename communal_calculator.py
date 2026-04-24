@@ -2,6 +2,7 @@ from calculator import calculate_service
 from gui import show_results_window
 import config
 from file_manager import save_settings, save_readings_to_history
+from decimal import Decimal, InvalidOperation
 
 def get_services():
     """Возвращает словарь services со всеми параметрами."""
@@ -33,76 +34,80 @@ def get_fees():
 
 # ФУНКЦИИ ДЛЯ ОСНОВНОГО РАСЧЕТА
 
-def calculate(enter_gas, enter_electricity, enter_water, 
-              box_gas_var, box_electricity_var, box_water_var,
-              start_value_gas, start_value_electricity, start_value_water,
-              tarif_gas, tarif_electricity, tarif_water,
-              fee_gas, fee_electricity, fee_water, warning_callback, error_callback):
-    """Основная функция расчета"""
+def calculate_dynamic(entries, checkboxes, services, warning_callback, error_callback, save_services_callback):
     try:
-        results_data = []  # Список для хранения данных по каждой позиции
-        current_readings = {}  # Словарь для текущих показаний
-        costs = {}  # Словарь для стоимостей без комиссии
+        results_data = []
+        current_readings = {}
+        costs = {}
 
-        # Обработка газа
-        resuslts_gas = calculate_service(
-            "Газ",
-            enter_gas.get(),
-            start_value_gas,
-            tarif_gas,
-            box_gas_var.get(),
-            fee_gas,
-        )  # Это возвращаемый кортеж данных функции calculate_service для газа
-        if resuslts_gas is not None:
-            results_data.append(resuslts_gas)
-            current_readings["gas"] = int(enter_gas.get())
-            costs["gas"] = resuslts_gas["Amount"]
-        
-        # Обработка электричества
-        results_electricity = calculate_service(
-            "Электричество",
-            enter_electricity.get(),
-            start_value_electricity,
-            tarif_electricity,
-            box_electricity_var.get(),
-            fee_electricity,
-        )  # Это возвращаемый кортеж функции calculate_service для электричества
-        if results_electricity is not None:
-            results_data.append(results_electricity)
-            current_readings["electricity"] = int(enter_electricity.get())
-            costs["electricity"] = results_electricity["Amount"]
+        for key, service in services.items():
+            if not service.get("enabled", True):
+                continue
 
-        # Обработка воды
-        resultrs_water = calculate_service(
-            "Вода",
-            enter_water.get(),
-            start_value_water,
-            tarif_water,
-            box_water_var.get(),
-            fee_water,
-        )  # Это возвращаемый кортеж функции calculate_service для воды
-        if resultrs_water is not None:
-            results_data.append(resultrs_water)
-            current_readings["water"] = int(enter_water.get())
-            costs["water"] = resultrs_water["Amount"]
+            name = service["name"]
+            service_type = service["type"]
+            tariff = service["tariff"]
+            fee = service["fee"]
 
-        # Проверка, что хотя бы одно поле заполнено
+            if service_type == "metered":
+                entry = entries.get(key)
+                if entry is None:
+                    continue
+                value_str = entry.get().strip()
+                if not value_str:
+                    continue
+                try:
+                    end = Decimal(value_str)
+                    start = Decimal(service.get("start_value", 0))
+                    consumption = end - start
+                    amount = consumption * Decimal(str(tariff))
+                except InvalidOperation:
+                    error_callback(name, "Введите корректное число!")
+                    return
+            else:  # fixed
+                value_str = None
+                consumption = 1
+                amount = Decimal(str(tariff))
+
+            checkbox_var = checkboxes.get(key)
+            has_commission = checkbox_var.get() if checkbox_var else 0
+            if has_commission:
+                fee_amount = amount * Decimal(str(fee))
+            else:
+                fee_amount = Decimal('0')
+            total = amount + fee_amount
+
+            result_item = {
+                "Name": name,
+                "Start value": service.get("start_value", "—") if service_type == "metered" else "—",
+                "End value": value_str if value_str else "—",
+                "Consumption": consumption if service_type == "metered" else "—",
+                "Tariff": tariff,
+                "Amount": amount,
+                "Fee": fee_amount,
+                "Total": total
+            }
+            results_data.append(result_item)
+            if service_type == "metered":
+                current_readings[key] = int(value_str)
+                costs[key] = amount
+
         if not results_data:
             warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
             return
 
-        # Вычисляем общую сумму с комиссией
-        total_amount=sum(data["Amount"] for data in results_data)
-        total_fee = sum(data["Fee"] for data in results_data)
-        total_sum_with_fee = sum(data["Total"] for data in results_data)
+        total_amount = sum(item["Amount"] for item in results_data)
+        total_fee = sum(item["Fee"] for item in results_data)
+        total_sum_with_fee = sum(item["Total"] for item in results_data)
 
+        # Функция сохранения (обновляет начальные значения в services)
+        def save_readings(current_readings, costs, total_sum_with_fee):
+            for key, reading in current_readings.items():
+                if key in services and services[key]["type"] == "metered":
+                    services[key]["start_value"] = reading
+            save_services_callback()
 
-        # Показываем окно с результатами
-        show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, save_readings)
-
-    except ValueError as e:
-        error_callback("Ошибка", str(e))
-        return
+        show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, save_readings, services)
 
     except Exception as e:
         error_callback("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
@@ -118,18 +123,18 @@ def save_initial_settings(gas, electricity, water):
     config.services["water"]["start_value"] = water
     save_settings()  
 
-def save_tariffs(gas, electricity, water):
+def save_tariffs(new_tariffs):
     """Сохраняет тарифы и записывает в файл."""
-    config.services["gas"]["tariff"] = gas
-    config.services["electricity"]["tariff"] = electricity
-    config.services["water"]["tariff"] = water
+    for key, new_tariff in new_tariffs.items():
+        if key in config.services:
+            config.services[key]["tariff"] = new_tariff
     save_settings()      
 
-def save_fees(gas, electricity, water):
+def save_fees(new_fees):
     """Сохраняет комиссии и записывает в файл."""
-    config.services["gas"]["fee"] = gas
-    config.services["electricity"]["fee"] = electricity
-    config.services["water"]["fee"] = water
+    for key, new_fee in new_fees.items():
+        if key in config.services:
+            config.services[key]["fee"] = new_fee
     save_settings()
 
 def save_services():
