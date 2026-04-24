@@ -131,3 +131,8 @@ def save_fees(gas, electricity, water):
     config.services["electricity"]["fee"] = electricity
     config.services["water"]["fee"] = water
     save_settings()
+
+def save_services():
+    """Сохраняет текущее состояние services в файл."""
+    from file_manager import save_settings
+    save_settings()

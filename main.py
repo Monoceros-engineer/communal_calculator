@@ -2,7 +2,8 @@ from file_manager import load_settings
 from gui import create_main_window
 from communal_calculator import (
     calculate, save_initial_settings, get_start_values,
-    get_tariffs, save_tariffs, get_fees, save_fees, get_services
+    get_tariffs, save_tariffs, get_fees, save_fees, get_services,
+    save_services
 )
 
 services = get_services()
@@ -12,7 +13,7 @@ if __name__ == "__main__":
     start_values = get_start_values()
     tariffs = get_tariffs()
     fees = get_fees()
-    window = create_main_window(
+    window = window = create_main_window(
     calculate, is_first_run, start_values, save_initial_settings,
-    tariffs, save_tariffs, get_fees, save_fees, services=services)
+    tariffs, save_tariffs, get_fees, save_fees, services, save_services)
     window.mainloop()

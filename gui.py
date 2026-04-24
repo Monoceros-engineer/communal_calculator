@@ -141,7 +141,8 @@ def show_welcome_window(start_values, on_save):
 
 #Создаем главное окно
 def create_main_window(calculate_func, is_first_run, start_values, save_initial_callback,
-                       tariffs, save_tariffs_callback, get_fees_callback, save_fees_callback, services):
+                       tariffs, save_tariffs_callback, get_fees_callback, save_fees_callback,
+                       services, save_services_callback):
     window = Tk()
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
@@ -193,10 +194,10 @@ def create_main_window(calculate_func, is_first_run, start_values, save_initial_
     btn_settings = Button(
     window, text="Настройки", bg="lightgray",
     command=lambda: open_settings_window(tariffs, save_tariffs_callback,
-    fees, save_fees_callback,
-    start_values, save_initial_callback,
+    get_fees_callback, save_fees_callback,
     update_checkbutton_texts,
-    services))
+    services,
+    save_services_callback))
 
     btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
 
@@ -269,8 +270,7 @@ def create_main_window(calculate_func, is_first_run, start_values, save_initial_
     return window
 
 #Создаем функцию, открывающую окно настроек
-def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, start_values, 
-                         save_start_callback, update_fees_callback, services):
+def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, update_fees_callback, services, save_services_callback):
     """Открывает главное окно настроек"""
     settings_window = Toplevel()
     settings_window.title("Настройки")
@@ -302,17 +302,8 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
 
     Button(
         settings_window,
-        text="Начальные настройки",
-        command=lambda: open_start_values_window(start_values, save_start_callback),
-        bg="lightblue",
-        font=("Arial", 11),
-        width=20,
-    ).pack(pady=5)
-
-    Button(
-        settings_window,
         text="Управление услугами",
-        command=lambda: open_manage_services_window(services),
+        command=lambda: open_manage_services_window(services, save_services_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -500,138 +491,12 @@ def open_fee_window(current_fees, on_save, update_callback):
         fee_window, text="Отмена", command=cancel_fee_changes, bg="lightcoral", width=10
     ).grid(row=4, column=1, pady=20)
 
-def open_start_values_window(current_start_values, on_save):
-    """Открывает окно редактирования начальных значений с предупреждением"""
-
-    # Сначала показываем предупреждение
-    box.showwarning(
-        "Внимание!",
-        "Изменение начальных настроек может привести к \nнекорректным результатам расчетов!\n\n"
-        "Убедитесь, что вы действительно хотите \nизменить эти значения.",
-    )
-
-    start_window = Toplevel()
-    start_window.title("Редактирование начальных значений")
-    start_window.geometry("350x300")
-    start_window.resizable(0,0)
-    start_window.grab_set()
-
-    # Создаем переменные для редактирования
-    start_gas_var = StringVar(value=str(current_start_values['gas']))
-    start_electricity_var = StringVar(value=str(current_start_values['electricity']))
-    start_water_var = StringVar(value=str(current_start_values['water']))
-
-    # Заголовок
-    Label(
-        start_window,
-        text="Редактирование начальных значений",
-        font=("Arial", 12, "bold"),
-    ).grid(row=0, column=0, columnspan=2, pady=10)
-
-    # Добавляем предупреждение прямо в окно
-    warning_label = Label(
-        start_window,
-        text="⚠️ Будьте внимательны!\nИзменение этих значений повлияет на все будущие расчеты",
-        font=("Arial", 9),
-        fg="red",
-        justify=CENTER,
-    )
-    warning_label.grid(row=1, column=0, columnspan=2, pady=5)
-
-    # Поля ввода
-    Label(start_window, text="Газ (начало):").grid(
-        row=2, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_gas = Entry(start_window, textvariable=start_gas_var, width=15)
-    entry_gas.grid(row=2, column=1, padx=10, pady=5)
-
-    Label(start_window, text="Электричество (начало):").grid(
-        row=3, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_electricity = Entry(
-        start_window, textvariable=start_electricity_var, width=15
-    )
-    entry_electricity.grid(row=3, column=1, padx=10, pady=5)
-
-    Label(start_window, text="Вода (начало):").grid(
-        row=4, column=0, padx=10, pady=5, sticky="e"
-    )
-    entry_water = Entry(start_window, textvariable=start_water_var, width=15)
-    entry_water.grid(row=4, column=1, padx=10, pady=5)
-
-    def apply_start_changes():
-        """Применяет изменения начальных значений с подтверждением"""
-        nonlocal start_gas_var, start_electricity_var, start_water_var
-
-        try:
-            # Пробуем преобразовать введенные значения в int
-            new_gas = int(start_gas_var.get())
-            new_electricity = int(start_electricity_var.get())
-            new_water = int(start_water_var.get())
-
-            # Проверяем, что значения положительные
-            if new_gas < 0 or new_electricity < 0 or new_water < 0:
-                box.showerror(
-                    "Ошибка", "Начальные значения должны быть неотрицательными!"
-                )
-                return
-
-            # Запрашиваем подтверждение
-            confirm = box.askyesno(
-                "Подтверждение",
-                f"Вы уверены, что хотите изменить начальные значения?\n\n"
-                f"Было:\n"
-                f"Газ: {current_start_values['gas']}\n"
-                f"Электричество: {current_start_values['electricity']}\n"
-                f"Вода: {current_start_values['water']}\n\n"
-                f"Станет:\n"
-                f"Газ: {new_gas}\n"
-                f"Электричество: {new_electricity}\n"
-                f"Вода: {new_water}",
-            )
-
-            if confirm:
-                # Применяем изменения
-                on_save(new_gas, new_electricity, new_water)
-
-                box.showinfo("Успех", "Начальные значения успешно обновлены!")
-                start_window.destroy()
-            else:
-                # Если пользователь отказался, ничего не меняем
-                box.showinfo("Отмена", "Изменения отменены")
-
-        except ValueError:
-            box.showerror("Ошибка", "Введите целые числа!")
-
-    def cancel_start_changes():
-        """Отменяет изменения и закрывает окно"""
-        # Спрашиваем, точно ли хочет отменить
-        if box.askyesno("Подтверждение", "Вы действительно хотите отменить изменения?"):
-            start_window.destroy()
-
-    # Кнопки
-    Button(
-        start_window,
-        text="Применить",
-        command=apply_start_changes,
-        bg="lightgreen",
-        width=10,
-    ).grid(row=5, column=0, pady=20)
-    Button(
-        start_window,
-        text="Отмена",
-        command=cancel_start_changes,
-        bg="lightcoral",
-        width=10,
-    ).grid(row=5, column=1, pady=20) 
-
-
-def open_manage_services_window(services):
-    """Открывает окно для просмотра и управления услугами (пока только просмотр)"""
+def open_manage_services_window(services, save_callback):
     win = Toplevel()
     win.title("Управление услугами")
-    win.geometry("500x400")
+    win.geometry("600x450")
     win.resizable(0,0)
+    win.grab_set()
 
     Label(win, text="Список услуг", font=("Arial", 12, "bold")).pack(pady=10)
 
@@ -645,11 +510,101 @@ def open_manage_services_window(services):
     listbox.pack(fill=BOTH, expand=True)
     scrollbar.config(command=listbox.yview)
 
-    for key, data in services.items():
-        display_text = f"{data['name']} ({key}) - Тип: {data['type']}, Вкл: {data['enabled']}"
-        listbox.insert(END, display_text)
+    button_frame = Frame(win)
+    button_frame.pack(pady=10)
 
-    Button(win, text="Закрыть", command=win.destroy, bg="lightgray", width=15).pack(pady=10)
+    btn_edit = Button(button_frame, text="Редактировать", width=12, state="disabled")
+    btn_delete = Button(button_frame, text="Удалить", width=12, state="disabled")
+    btn_toggle = Button(button_frame, text="Вкл/Выкл", width=12, state="disabled")
+    btn_add = Button(button_frame, text="Добавить", width=12)
+    btn_close = Button(button_frame, text="Закрыть", width=12)
+
+    btn_add.pack(side=LEFT, padx=5)
+    btn_edit.pack(side=LEFT, padx=5)
+    btn_delete.pack(side=LEFT, padx=5)
+    btn_toggle.pack(side=LEFT, padx=5)
+    btn_close.pack(side=LEFT, padx=5)
+
+    service_keys = []
+
+    def update_buttons_state():
+        selection = listbox.curselection()
+        if selection:
+            state = "normal"
+            idx = selection[0]
+            key = service_keys[idx]
+            enabled = services[key].get("enabled", True)
+            btn_toggle.config(text="Выключить" if enabled else "Включить")
+        else:
+            state = "disabled"
+            btn_toggle.config(text="Вкл/Выкл")
+        btn_edit.config(state=state)
+        btn_delete.config(state=state)
+        btn_toggle.config(state=state)
+
+    def refresh_list(select_key=None):
+        listbox.delete(0, END)
+        service_keys.clear()
+        for key, data in services.items():
+            status = "Вкл" if data.get("enabled", True) else "Выкл"
+            display_text = f"{data['name']} ({key}) - {data['type']} - {status}"
+            listbox.insert(END, display_text)
+            service_keys.append(key)
+        if select_key is not None and select_key in service_keys:
+            idx = service_keys.index(select_key)
+            listbox.selection_set(idx)
+            listbox.see(idx)
+        update_buttons_state()
+
+    refresh_list()
+
+    def on_select(event):
+        update_buttons_state()
+
+    listbox.bind('<<ListboxSelect>>', on_select)
+
+    # --- функции для кнопок (должны быть определены до их привязки) ---
+    def add_service():
+        choose_type_dialog(lambda st: add_service_dialog(services, save_callback, refresh_list, st))
+
+    def edit_service():
+        selection = listbox.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        key = service_keys[idx]
+        edit_service_dialog(services, key, save_callback, refresh_list)
+
+    def delete_service():
+        selection = listbox.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        key = service_keys[idx]
+        confirm = box.askyesno("Удаление", f"Удалить услугу '{services[key]['name']}'?")
+        if confirm:
+            del services[key]
+            save_callback()
+            refresh_list()
+
+    def toggle_service():
+        selection = listbox.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        key = service_keys[idx]
+        services[key]["enabled"] = not services[key].get("enabled", True)
+        save_callback()
+        refresh_list(select_key=key)   # ← передаём ключ, чтобы выделение осталось
+
+    # назначаем команды
+    btn_add.config(command=add_service)
+    btn_edit.config(command=edit_service)
+    btn_delete.config(command=delete_service)
+    btn_toggle.config(command=toggle_service)
+    btn_close.config(command=win.destroy)
+
+
 
 def show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, on_save):
     """Создает окно с результатами в виде таблицы и предлагает обновить начальные значения"""
@@ -857,3 +812,215 @@ def show_warning(title, message):
 
 def show_error(title, message):
     box.showerror(title, message)
+
+def add_service_dialog(services, save_callback, refresh_callback, service_type):
+    """Окно добавления новой услуги"""
+    win = Toplevel()
+    win.title("Добавление услуги")
+    win.geometry("400x450" if service_type == "metered" else "400x350")
+    win.resizable(0,0)
+    win.grab_set()
+
+    Label(win, text="Новая услуга", font=("Arial", 12, "bold")).pack(pady=10)
+
+    frame = Frame(win)
+    frame.pack(pady=5, padx=10)
+
+    # Название услуги
+    Label(frame, text="Название услуги:").grid(row=0, column=0, sticky="e", pady=5)
+    name_entry = Entry(frame, width=25)
+    name_entry.grid(row=0, column=1, pady=5)
+
+    row = 1
+    start_entry = None
+    if service_type == "metered":
+        Label(frame, text="Начальное значение:").grid(row=row, column=0, sticky="e", pady=5)
+        start_entry = Entry(frame, width=25)
+        start_entry.grid(row=row, column=1, pady=5)
+        start_entry.insert(0, "0")
+        row += 1
+
+    # Тариф
+    Label(frame, text="Тариф (руб.):").grid(row=row, column=0, sticky="e", pady=5)
+    tariff_entry = Entry(frame, width=25)
+    tariff_entry.grid(row=row, column=1, pady=5)
+    tariff_entry.insert(0, "0.0")
+    row += 1
+
+    # Комиссия (%)
+    Label(frame, text="Комиссия (%):").grid(row=row, column=0, sticky="e", pady=5)
+    fee_entry = Entry(frame, width=25)
+    fee_entry.grid(row=row, column=1, pady=5)
+    fee_entry.insert(0, "0")
+    row += 1
+
+    enabled_var = BooleanVar(value=True)
+    Checkbutton(frame, text="Включена", variable=enabled_var).grid(row=row, column=1, sticky="w", pady=5)
+
+    def save_new():
+        name = name_entry.get().strip()
+        if not name:
+            box.showerror("Ошибка", "Введите название услуги")
+            return
+        key = name.lower().replace(' ', '_')
+        if key in services:
+            box.showerror("Ошибка", "Услуга с таким названием уже существует")
+            return
+        try:
+            tariff = float(tariff_entry.get())
+            if tariff <= 0:
+                raise ValueError
+        except:
+            box.showerror("Ошибка", "Тариф должен быть положительным числом")
+            return
+        try:
+            fee_percent = float(fee_entry.get())
+            if fee_percent < 0 or fee_percent > 100:
+                raise ValueError
+            fee = fee_percent / 100.0
+        except:
+            box.showerror("Ошибка", "Комиссия должна быть от 0 до 100")
+            return
+
+        new_service = {
+            "name": name,
+            "type": service_type,
+            "enabled": enabled_var.get(),
+            "tariff": tariff,
+            "fee": fee
+        }
+        if service_type == "metered":
+            try:
+                start_val = int(start_entry.get())
+                if start_val < 0:
+                    raise ValueError
+                new_service["start_value"] = start_val
+            except:
+                box.showerror("Ошибка", "Начальное значение должно быть неотрицательным целым")
+                return
+        services[key] = new_service
+        save_callback()
+        refresh_callback()
+        win.destroy()
+
+    Button(win, text="Сохранить", command=save_new, bg="lightgreen", width=15).pack(pady=10)
+    Button(win, text="Отмена", command=win.destroy, bg="lightcoral", width=15).pack(pady=5)
+
+def choose_type_dialog(callback):
+    """Выбирает тип услуги: фиксированный или по счетчику"""
+    win = Toplevel()
+    win.title("Выбор типа услуги")
+    win.geometry("300x150")
+    win.resizable(0,0)
+    win.grab_set()
+
+    Label(win, text="Выберите тип услуги:", font=("Arial", 11)).pack(pady=10)
+    type_var = StringVar(value="metered")
+    Radiobutton(win, text="По счётчику", variable=type_var, value="metered").pack(anchor="w", padx=20)
+    Radiobutton(win, text="Фиксированный", variable=type_var, value="fixed").pack(anchor="w", padx=20)
+
+    def on_next():
+        win.destroy()
+        callback(type_var.get())
+
+    Button(win, text="Далее", command=on_next, bg="lightblue", width=10).pack(pady=10)
+
+def edit_service_dialog(services, key, save_callback, refresh_callback):
+    """Окно редактирования услуг"""
+    service = services[key]
+    win = Toplevel()
+    win.title("Редактирование услуги")
+    win.geometry("400x450" if service["type"] == "metered" else "400x350")
+    win.resizable(0,0)
+    win.grab_set()
+
+    Label(win, text=f"Редактирование: {service['name']}", font=("Arial", 12, "bold")).pack(pady=10)
+
+    frame = Frame(win)
+    frame.pack(pady=5, padx=10)
+
+    # Название
+    Label(frame, text="Название услуги:").grid(row=0, column=0, sticky="e", pady=5)
+    name_entry = Entry(frame, width=25)
+    name_entry.insert(0, service["name"])
+    name_entry.grid(row=0, column=1, pady=5)
+
+    row = 1
+    start_entry = None
+    if service["type"] == "metered":
+        Label(frame, text="Начальное значение:").grid(row=row, column=0, sticky="e", pady=5)
+        start_entry = Entry(frame, width=25)
+        start_entry.insert(0, str(service.get("start_value", 0)))
+        start_entry.grid(row=row, column=1, pady=5)
+        row += 1
+
+    # Тариф
+    Label(frame, text="Тариф (руб.):").grid(row=row, column=0, sticky="e", pady=5)
+    tariff_entry = Entry(frame, width=25)
+    tariff_entry.insert(0, str(service["tariff"]))
+    tariff_entry.grid(row=row, column=1, pady=5)
+    row += 1
+
+    # Комиссия (%)
+    Label(frame, text="Комиссия (%):").grid(row=row, column=0, sticky="e", pady=5)
+    fee_entry = Entry(frame, width=25)
+    fee_entry.insert(0, str(service["fee"] * 100))
+    fee_entry.grid(row=row, column=1, pady=5)
+    row += 1
+
+    enabled_var = BooleanVar(value=service.get("enabled", True))
+    Checkbutton(frame, text="Включена", variable=enabled_var).grid(row=row, column=1, sticky="w", pady=5)
+
+    def save_edit():
+        new_name = name_entry.get().strip()
+        if not new_name:
+            box.showerror("Ошибка", "Введите название услуги")
+            return
+        # Проверка на уникальность, если имя изменилось
+        new_key = new_name.lower().replace(' ', '_')
+        if new_key != key and new_key in services:
+            box.showerror("Ошибка", "Услуга с таким названием уже существует")
+            return
+        try:
+            tariff = float(tariff_entry.get())
+            if tariff <= 0:
+                raise ValueError
+        except:
+            box.showerror("Ошибка", "Тариф должен быть положительным числом")
+            return
+        try:
+            fee_percent = float(fee_entry.get())
+            if fee_percent < 0 or fee_percent > 100:
+                raise ValueError
+            fee = fee_percent / 100.0
+        except:
+            box.showerror("Ошибка", "Комиссия должна быть от 0 до 100")
+            return
+
+        updated_service = {
+            "name": new_name,
+            "type": service["type"],
+            "enabled": enabled_var.get(),
+            "tariff": tariff,
+            "fee": fee
+        }
+        if service["type"] == "metered":
+            try:
+                start_val = int(start_entry.get())
+                if start_val < 0:
+                    raise ValueError
+                updated_service["start_value"] = start_val
+            except:
+                box.showerror("Ошибка", "Начальное значение должно быть неотрицательным целым")
+                return
+
+        # Если изменилось название, удаляем старый ключ и создаём новый
+        if new_key != key:
+            del services[key]
+        services[new_key] = updated_service
+        save_callback()
+        refresh_callback()
+        win.destroy()
+
+    Button(win, text="Сохранить", command=save_edit, bg="lightgreen", width=15).pack(pady=10)
+    Button(win, text="Отмена", command=win.destroy, bg="lightcoral", width=15).pack(pady=5)
