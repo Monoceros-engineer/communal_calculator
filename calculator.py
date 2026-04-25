@@ -32,3 +32,24 @@ def calculate_service(name, get_entry, start_value, tariff, get_checkbox_var, fe
             raise ValueError(f"В поле '{name}' введите корректное число!")
     else:
         return None
+    
+def calculate_fixed_service(name, tariff, has_commission, fee):
+    """Расчёт фиксированной услуги.
+       Возвращает словарь с результатами."""
+    from decimal import Decimal
+    amount = Decimal(str(tariff))
+    if has_commission:
+        fee_amount = amount * Decimal(str(fee))
+    else:
+        fee_amount = Decimal('0')
+    total = amount + fee_amount
+    return {
+        "Name": name,
+        "Start value": "-",
+        "End value": "-",
+        "Consumption": "-",
+        "Tariff": tariff,
+        "Amount": amount,
+        "Fee": fee_amount,
+        "Total": total
+    }

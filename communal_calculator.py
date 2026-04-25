@@ -1,4 +1,4 @@
-from calculator import calculate_service
+from calculator import calculate_service, calculate_fixed_service
 from gui import show_results_window
 import config
 from file_manager import save_settings, save_readings_to_history
@@ -48,6 +48,7 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
             service_type = service["type"]
             tariff = service["tariff"]
             fee = service["fee"]
+            has_commission = checkboxes.get(key).get() if checkboxes.get(key) else 0
 
             if service_type == "metered":
                 entry = entries.get(key)
@@ -56,41 +57,22 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
                 value_str = entry.get().strip()
                 if not value_str:
                     continue
+                has_commission = 1 if (checkboxes.get(key) and checkboxes.get(key).get()) else 0
                 try:
-                    end = Decimal(value_str)
-                    start = Decimal(service.get("start_value", 0))
-                    consumption = end - start
-                    amount = consumption * Decimal(str(tariff))
-                except InvalidOperation:
-                    error_callback(name, "Введите корректное число!")
+                    result = calculate_service(name, value_str, service.get("start_value", 0), tariff, has_commission, fee)
+                except ValueError as e:
+                    error_callback(name, str(e))
                     return
-            else:  # fixed
-                value_str = None
-                consumption = 1
-                amount = Decimal(str(tariff))
-
-            checkbox_var = checkboxes.get(key)
-            has_commission = checkbox_var.get() if checkbox_var else 0
-            if has_commission:
-                fee_amount = amount * Decimal(str(fee))
-            else:
-                fee_amount = Decimal('0')
-            total = amount + fee_amount
-
-            result_item = {
-                "Name": name,
-                "Start value": service.get("start_value", "—") if service_type == "metered" else "—",
-                "End value": value_str if value_str else "—",
-                "Consumption": consumption if service_type == "metered" else "—",
-                "Tariff": tariff,
-                "Amount": amount,
-                "Fee": fee_amount,
-                "Total": total
-            }
-            results_data.append(result_item)
-            if service_type == "metered":
+                if result is None:
+                    # этот случай невозможен, так как поле не пустое, но оставим
+                    continue
+                results_data.append(result)
                 current_readings[key] = int(value_str)
-                costs[key] = amount
+                costs[key] = result["Amount"]
+            else:  # fixed
+                result = calculate_fixed_service(name, tariff, has_commission, fee)
+                results_data.append(result)
+                # Для fixed не обновляем current_readings и costs (они не нужны для сохранения)
 
         if not results_data:
             warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
@@ -100,7 +82,6 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
         total_fee = sum(item["Fee"] for item in results_data)
         total_sum_with_fee = sum(item["Total"] for item in results_data)
 
-        # Функция сохранения (обновляет начальные значения в services)
         def save_readings(current_readings, costs, total_sum_with_fee):
             for key, reading in current_readings.items():
                 if key in services and services[key]["type"] == "metered":
