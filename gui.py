@@ -2,162 +2,22 @@ from tkinter import *
 import tkinter.messagebox as box
 from datetime import datetime
 
-# Приветственное окно для первого запуска
-def show_welcome_window(start_values, on_save):
-    """Показывает приветственное окно для ввода начальных значений"""
-
-    welcome_window = Toplevel()
-    welcome_window.title("Добро пожаловать!")
-    welcome_window.geometry("400x350")
-    welcome_window.resizable(0,0)
-    welcome_window.grab_set()  # Блокирует главное окно
-
-    # Заголовок
-    Label(
-        welcome_window,
-        text="Добро пожаловать в Калькулятор коммуналки!",
-        font=("Arial", 12, "bold"),
-        fg="blue",
-    ).pack(pady=15)
-
-    # Пояснение
-    explanation = (
-        "Это ваш первый запуск программы.\n\n"
-        "Пожалуйста, введите начальные показания счетчиков:\n"
-        "(эти значения можно будет изменить позже в настройках)"
-    )
-
-    Label(welcome_window, text=explanation, font=("Arial", 10), justify=LEFT).pack(
-        pady=10, padx=20
-    )
-
-    # Фрейм для полей ввода
-    frame = Frame(welcome_window)
-    frame.pack(pady=10)
-
-    # Поля ввода
-    Label(frame, text="Газ:", font=("Arial", 10)).grid(
-        row=0, column=0, padx=5, pady=5, sticky="e"
-    )
-    gas_entry = Entry(frame, width=20, font=("Arial", 10))
-    gas_entry.insert(0, str(start_values['gas']))
-    gas_entry.grid(row=0, column=1, padx=5, pady=5)
-
-    Label(frame, text="Электричество:", font=("Arial", 10)).grid(
-        row=1, column=0, padx=5, pady=5, sticky="e"
-    )
-    electricity_entry = Entry(frame, width=20, font=("Arial", 10))
-    electricity_entry.insert(0, str(start_values['electricity']))
-    electricity_entry.grid(row=1, column=1, padx=5, pady=5)
-
-    Label(frame, text="Вода:", font=("Arial", 10)).grid(
-        row=2, column=0, padx=5, pady=5, sticky="e"
-    )
-    water_entry = Entry(frame, width=20, font=("Arial", 10))
-    water_entry.insert(0, str(start_values['water']))
-    water_entry.grid(row=2, column=1, padx=5, pady=5)
-
-    # Подсказка
-    Label(
-        welcome_window,
-        text="Введите целые числа (показания счетчиков)",
-        font=("Arial", 9),
-        fg="gray",
-    ).pack()
-
-    # Дополнительное пояснение
-    Label(
-        welcome_window,
-        text="Эти значения будут использоваться как начальная точка отсчета.\n"
-        "После каждого расчета они будут автоматически обновляться\n"
-        "новыми показаниями для следующего месяца.",
-        font=("Arial", 9),
-        fg="blue",
-        justify=LEFT,
-    ).pack(pady=10)
-
-
-    def save_initial_settings():
-        """Сохраняет начальные значения и закрывает окно"""
-        nonlocal gas_entry, electricity_entry, water_entry
-
-        try:
-            # Получаем значения
-            new_gas = int(gas_entry.get())
-            new_electricity = int(electricity_entry.get())
-            new_water = int(water_entry.get())
-
-            # Проверяем, что значения положительные
-            if new_gas < 0 or new_electricity < 0 or new_water < 0:
-                box.showerror("Ошибка", "Значения должны быть неотрицательными!")
-                return
-
-            # Сохраняем значения и все настройки в файл
-            on_save(new_gas, new_electricity, new_water)
-
-            # Показываем сообщение об успехе
-            box.showinfo(
-                "Готово!",
-                "Начальные значения сохранены!\n\n"
-                "Теперь вы можете вводить текущие показания и рассчитывать сумму к оплате.\n"
-                "После оплаты новые показания автоматически станут начальными для следующего месяца.",
-            )
-
-            # Закрываем приветственное окно
-            welcome_window.destroy()
-
-        except ValueError:
-            box.showerror("Ошибка", "Введите целые числа!")
-
-    # Кнопки
-    Button(
-        welcome_window,
-        text="Сохранить и продолжить",
-        command=save_initial_settings,
-        bg="lightgreen",
-        font=("Arial", 11),
-        width=20,
-    ).pack(pady=15)
-
-    def reset_to_default():
-        # Устанавливаем значения по умолчанию в поля ввода
-        gas_entry.delete(0, END)
-        gas_entry.insert(0, str(start_values["gas"]))
-        electricity_entry.delete(0, END)
-        electricity_entry.insert(0, str(start_values["electricity"]))
-        water_entry.delete(0, END)
-        water_entry.insert(0, str(start_values["water"]))
-        # Сохраняем значения по умолчанию через callback
-        on_save(start_values["gas"], start_values["electricity"], start_values["water"])
-        welcome_window.destroy()
-
-    Button(
-        welcome_window,
-        text="Использовать значения по умолчанию",
-        command=reset_to_default,
-        bg="lightgray",
-        font=("Arial", 10),
-    ).pack(pady=5)
 
 #Создаем главное окно
-def create_main_window(calculate_func, is_first_run, start_values, save_initial_callback,
-                       tariffs, save_tariffs_callback, get_fees_callback, save_fees_callback,
+def create_main_window(calculate_func, start_values, save_initial_callback,
+                       tariffs, save_tariffs_callback, fees, save_fees_callback,
                        services, save_services_callback):
     window = Tk()
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
 
-    # Приветственное окно или подсказка (пока оставляем статичную, позже сделаем динамической)
-    if is_first_run:
-        window.after(100, lambda: show_welcome_window(start_values, save_initial_callback))
-    else:
-        # Формируем сообщение из начальных значений всех metered услуг
-        msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
-        for key, srv in services.items():
-            if srv.get("enabled") and srv["type"] == "metered" and "start_value" in srv:
-                msg_lines.append(f"{srv['name']}: {srv['start_value']}")
-        msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
-        window.after(100, lambda: box.showinfo("Информация", msg))
+    # Информационное сообщение о начальных значениях
+    msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
+    for key, srv in services.items():
+        if srv.get("enabled") and srv["type"] == "metered" and "start_value" in srv:
+            msg_lines.append(f"{srv['name']}: {srv['start_value']}")
+    msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
+    window.after(100, lambda: box.showinfo("Информация", msg))
 
     # Словари для виджетов
     entries = {}
@@ -178,7 +38,7 @@ def create_main_window(calculate_func, is_first_run, start_values, save_initial_
         window, text="Настройки", bg="lightgray",
         command=lambda: open_settings_window(
             tariffs, save_tariffs_callback,
-            get_fees_callback, save_fees_callback,
+            fees, save_fees_callback,
             update_checkbutton_texts,
             services, save_services_callback
         )
@@ -391,9 +251,9 @@ def open_fee_window(services, save_fees_callback, update_callback):
     Button(scrollable_frame, text="Сохранить", command=save_fee_changes, bg="lightgreen", width=10).grid(row=row, column=0, pady=20)
     Button(scrollable_frame, text="Отмена", command=win.destroy, bg="lightcoral", width=10).grid(row=row, column=1, pady=20)
 
-def open_manage_services_window(services, save_callback):
+def open_manage_services_window(services, save_callback, first_run=False, on_finish=None):
     win = Toplevel()
-    win.title("Управление услугами")
+    win.title("Управление услугами" if not first_run else "Настройка услуг (первый запуск)")
     win.geometry("600x450")
     win.resizable(0,0)
     win.grab_set()
@@ -417,13 +277,22 @@ def open_manage_services_window(services, save_callback):
     btn_delete = Button(button_frame, text="Удалить", width=12, state="disabled")
     btn_toggle = Button(button_frame, text="Вкл/Выкл", width=12, state="disabled")
     btn_add = Button(button_frame, text="Добавить", width=12)
-    btn_close = Button(button_frame, text="Закрыть", width=12)
+
+    if first_run:
+        btn_finish = Button(button_frame, text="Готово", width=12)
+        btn_close = None
+    else:
+        btn_finish = None
+        btn_close = Button(button_frame, text="Закрыть", width=12)
 
     btn_add.pack(side=LEFT, padx=5)
     btn_edit.pack(side=LEFT, padx=5)
     btn_delete.pack(side=LEFT, padx=5)
     btn_toggle.pack(side=LEFT, padx=5)
-    btn_close.pack(side=LEFT, padx=5)
+    if btn_finish:
+        btn_finish.pack(side=LEFT, padx=5)
+    if btn_close:
+        btn_close.pack(side=LEFT, padx=5)
 
     service_keys = []
 
@@ -458,12 +327,9 @@ def open_manage_services_window(services, save_callback):
 
     refresh_list()
 
-    def on_select(event):
-        update_buttons_state()
+    listbox.bind('<<ListboxSelect>>', lambda e: update_buttons_state())
 
-    listbox.bind('<<ListboxSelect>>', on_select)
-
-    # --- функции для кнопок (должны быть определены до их привязки) ---
+    # --- функции для кнопок ---
     def add_service():
         choose_type_dialog(lambda st: add_service_dialog(services, save_callback, refresh_list, st))
 
@@ -495,14 +361,21 @@ def open_manage_services_window(services, save_callback):
         key = service_keys[idx]
         services[key]["enabled"] = not services[key].get("enabled", True)
         save_callback()
-        refresh_list(select_key=key)   # ← передаём ключ, чтобы выделение осталось
+        refresh_list(select_key=key)
 
-    # назначаем команды
+    def finish():
+        if on_finish:
+            on_finish()
+        win.destroy()
+
     btn_add.config(command=add_service)
     btn_edit.config(command=edit_service)
     btn_delete.config(command=delete_service)
     btn_toggle.config(command=toggle_service)
-    btn_close.config(command=win.destroy)
+    if btn_finish:
+        btn_finish.config(command=finish)
+    if btn_close:
+        btn_close.config(command=win.destroy)
 
 
 

@@ -97,12 +97,12 @@ def save_readings(current_readings, costs, total_sum_with_fee):
     """Сохраняет показания в историю, обновляет начальные значения."""
     save_readings_to_history(current_readings, costs, total_sum_with_fee)
 
-def save_initial_settings(gas, electricity, water):
-    """Сохраняет начальные показания."""
-    config.services["gas"]["start_value"] = gas
-    config.services["electricity"]["start_value"] = electricity
-    config.services["water"]["start_value"] = water
-    save_settings()  
+def save_initial_settings_multi(initial_values, services, save_services_callback):
+    """Сохраняет начальные значения для нескольких услуг (по счётчику)."""
+    for key, value in initial_values.items():
+        if key in services and services[key]["type"] == "metered":
+            services[key]["start_value"] = value
+    save_services_callback()
 
 def save_tariffs(new_tariffs):
     """Сохраняет тарифы и записывает в файл."""
