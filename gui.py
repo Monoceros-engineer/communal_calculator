@@ -10,7 +10,7 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     window = Tk()
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
-
+    
     # Информационное сообщение о начальных значениях
     msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
     for key, srv in services.items():
@@ -26,8 +26,10 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
 
     # Функция обновления текста чекбоксов (будет вызываться после изменения комиссий)
     def update_checkbutton_texts():
-        # Для простоты пока не обновляем динамически, заглушка
-        pass
+        for key, service in services.items():
+            if key in checkbox_texts:
+                new_text = f"{int(service.get('fee', 0.0) * 100)}%"
+                checkbox_texts[key].set(new_text)
 
     # Верхняя панель
     current_date = datetime.now().strftime("%d.%m.%Y")
@@ -40,58 +42,83 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
             tariffs, save_tariffs_callback,
             fees, save_fees_callback,
             update_checkbutton_texts,
-            services, save_services_callback
+            services, save_services_callback, refresh_services_callback
         )
     )
     btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
+
+    def refresh_services_callback():
+        rebuild_services_frame()
 
     # Заголовки колонок
     Label(window, text="Ресурс", font=("Arial", 10, "bold")).grid(row=1, column=0, padx=5, pady=5)
     Label(window, text="Показания", font=("Arial", 10, "bold")).grid(row=1, column=1, padx=5, pady=5)
     Label(window, text="Комиссия", font=("Arial", 10, "bold")).grid(row=1, column=2, padx=5, pady=5)
 
-    # Динамическое создание строк для включённых услуг
-    row_idx = 2
-    for key, service in services.items():
-        if not service.get("enabled", True):
-            continue
-        # Название
-        Label(window, text=service["name"], font=("Arial", 10)).grid(row=row_idx, column=0, padx=5, pady=5, sticky="w")
-        # Поле ввода (только для metered)
-        if service["type"] == "metered":
-            entry = Entry(window, width=20)
-            entry.grid(row=row_idx, column=1, padx=5, pady=5)
-            entries[key] = entry
-        else:
-            # Для фиксированных показываем прочерк
-            Label(window, text="—", width=20, relief="ridge").grid(row=row_idx, column=1, padx=5, pady=5)
-        # Чекбокс комиссии
-        var = IntVar()
-        textvar = StringVar(value=f"{int(service['fee']*100)}%")
-        checkboxes[key] = var
-        checkbox_texts[key] = textvar
-        Checkbutton(window, textvariable=textvar, variable=var).grid(row=row_idx, column=2, padx=5, pady=5)
-        row_idx += 1
+    # Фрейм для динамических виджетов услуг
+    services_frame = Frame(window)
+    services_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
-    # Кнопка расчёта 
+    # Словари для виджетов (будут заполняться в build_services_frame)
+    entries = {}
+    checkboxes = {}
+    checkbox_texts = {}
+
+    def build_services_frame(frame, services, entries, checkboxes, checkbox_texts, window):
+        # очищаем фрейм перед построением
+        for widget in frame.winfo_children():
+            widget.destroy()
+        entries.clear()
+        checkboxes.clear()
+        checkbox_texts.clear()
+        row = 0
+        for key, service in services.items():
+            if not service.get("enabled", True):
+                continue
+            # Название
+            Label(frame, text=service["name"], font=("Arial", 10)).grid(row=row, column=0, padx=5, pady=5, sticky="w")
+            # Поле ввода (только для metered)
+            if service["type"] == "metered":
+                entry = Entry(frame, width=20)
+                entry.grid(row=row, column=1, padx=5, pady=5)
+                entries[key] = entry
+            else:
+                Label(frame, text="—", width=20, relief="ridge").grid(row=row, column=1, padx=5, pady=5)
+            # Чекбокс комиссии
+            var = IntVar()
+            text_var = StringVar(value=f"{int(service['fee']*100)}%")
+            Checkbutton(frame, textvariable=text_var, variable=var).grid(row=row, column=2, padx=5, pady=5)
+            checkboxes[key] = var
+            checkbox_texts[key] = text_var
+            row += 1
+
+    def rebuild_services_frame():
+        build_services_frame(services_frame, services, entries, checkboxes, checkbox_texts, window)
+
+    # Построение интерфейса услуг при запуске
+    rebuild_services_frame()
+
     btn_check = Button(
-    window,
-    text="Рассчитать",
-    command=lambda: calculate_func(entries, checkboxes, services, show_warning, show_error, save_services_callback),
-    bg="lightblue",
-    font=("Arial", 12),
-    width=20,
-)
-    btn_check.grid(row=row_idx, column=0, columnspan=3, pady=20)
+        window,
+        text="Рассчитать",
+        command=lambda: calculate_func(entries, checkboxes, services, show_warning, show_error, save_services_callback),
+        bg="lightblue",
+        font=("Arial", 12),
+        width=20,
+    )
+    btn_check.grid(row=100, column=0, columnspan=3, pady=20, sticky="n")
 
     # Настройка колонок
     for col in range(3):
         window.grid_columnconfigure(col, weight=0, minsize=100)
 
+    rebuild_services_frame()
+
     return window
 
-#Создаем функцию, открывающую окно настроек
-def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, update_fees_callback, services, save_services_callback):
+    #Создаем функцию, открывающую окно настроек
+def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callback, update_fees_callback, services, save_services_callback,
+                         refresh_callback):
     """Открывает главное окно настроек"""
     settings_window = Toplevel()
     settings_window.title("Настройки")
@@ -106,7 +133,7 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
     Button(
         settings_window,
         text="Тарифы",
-        command=lambda: open_tarif_window(tariffs, save_tariffs_callback),
+        command=lambda: open_tarif_window(services, save_tariffs_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -115,7 +142,7 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
     Button(
         settings_window,
         text="Комиссия",
-        command=lambda: open_fee_window(fees, save_fees_callback, update_fees_callback),
+        command=lambda: open_fee_window(services, save_fees_callback, update_fees_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -124,7 +151,9 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
     Button(
         settings_window,
         text="Управление услугами",
-        command=lambda: open_manage_services_window(services, save_services_callback),
+        command=lambda: open_manage_services_window(services, save_services_callback,
+                                                   first_run=False,
+                                                   refresh_callback=refresh_callback),
         bg="lightblue",
         font=("Arial", 11),
         width=20,
@@ -139,24 +168,20 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
         width=20,
     ).pack(pady=20)
 
+
    
-def open_tarif_window(services, current_tariffs, on_save):
-    """Открывает окно редактирования тарифов для всех услуг"""
+def open_tarif_window(services, save_tariffs_callback):
     win = Toplevel()
     win.title("Редактирование тарифов")
     win.geometry("400x400")
     win.resizable(0,0)
     win.grab_set()
 
-    # Рамка с прокруткой (на случай, если услуг много)
     canvas = Canvas(win, borderwidth=0)
     scrollbar = Scrollbar(win, orient="vertical", command=canvas.yview)
     scrollable_frame = Frame(canvas)
 
-    scrollable_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
+    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -165,14 +190,13 @@ def open_tarif_window(services, current_tariffs, on_save):
 
     Label(scrollable_frame, text="Редактирование тарифов", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=2, pady=10)
 
-    # Словарь для хранения переменных
     vars = {}
     row = 1
     for key, service in services.items():
         if not service.get("enabled", True):
-            continue  # показываем только включённые услуги (или можно все)
+            continue
         name = service["name"]
-        tariff = current_tariffs.get(key, service.get("tariff", 0.0))
+        tariff = service.get("tariff", 0.0)
         Label(scrollable_frame, text=f"{name}:", font=("Arial", 10)).grid(row=row, column=0, padx=10, pady=5, sticky="e")
         var = StringVar(value=str(tariff))
         Entry(scrollable_frame, textvariable=var, width=15).grid(row=row, column=1, padx=10, pady=5)
@@ -187,7 +211,7 @@ def open_tarif_window(services, current_tariffs, on_save):
                 if val <= 0:
                     raise ValueError
                 new_tariffs[key] = val
-            on_save(new_tariffs)   # on_save должна сохранить новые тарифы в config и перезаписать файл
+            save_tariffs_callback(new_tariffs)
             box.showinfo("Успех", "Тарифы обновлены")
             win.destroy()
         except ValueError:
@@ -197,7 +221,6 @@ def open_tarif_window(services, current_tariffs, on_save):
     Button(scrollable_frame, text="Отмена", command=win.destroy, bg="lightcoral", width=10).grid(row=row, column=1, pady=20)
 
 def open_fee_window(services, save_fees_callback, update_callback):
-    """Открывает окно редактирования комиссии для всех услуг"""
     win = Toplevel()
     win.title("Редактирование комиссии")
     win.geometry("400x400")
@@ -208,10 +231,7 @@ def open_fee_window(services, save_fees_callback, update_callback):
     scrollbar = Scrollbar(win, orient="vertical", command=canvas.yview)
     scrollable_frame = Frame(canvas)
 
-    scrollable_frame.bind(
-        "<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-    )
+    scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -233,7 +253,7 @@ def open_fee_window(services, save_fees_callback, update_callback):
         vars[key] = var
         row += 1
 
-    def save_fee_changes():
+    def save_fees():
         new_fees = {}
         try:
             for key, var in vars.items():
@@ -242,16 +262,16 @@ def open_fee_window(services, save_fees_callback, update_callback):
                     raise ValueError
                 new_fees[key] = val / 100.0
             save_fees_callback(new_fees)
-            update_callback()   # обновить текст чекбоксов
+            update_callback()
             box.showinfo("Успех", "Комиссия успешно обновлена!")
             win.destroy()
         except ValueError:
             box.showerror("Ошибка", "Комиссия должна быть от 0% до 100%")
 
-    Button(scrollable_frame, text="Сохранить", command=save_fee_changes, bg="lightgreen", width=10).grid(row=row, column=0, pady=20)
+    Button(scrollable_frame, text="Сохранить", command=save_fees, bg="lightgreen", width=10).grid(row=row, column=0, pady=20)
     Button(scrollable_frame, text="Отмена", command=win.destroy, bg="lightcoral", width=10).grid(row=row, column=1, pady=20)
 
-def open_manage_services_window(services, save_callback, first_run=False, on_finish=None):
+def open_manage_services_window(services, save_callback, first_run=False, on_finish=None, refresh_callback=None):
     win = Toplevel()
     win.title("Управление услугами" if not first_run else "Настройка услуг (первый запуск)")
     win.geometry("600x450")
@@ -331,7 +351,7 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
 
     # --- функции для кнопок ---
     def add_service():
-        choose_type_dialog(lambda st: add_service_dialog(services, save_callback, refresh_list, st))
+        choose_type_dialog(lambda st: add_service_dialog(services, save_callback, refresh_list, st, refresh_callback))
 
     def edit_service():
         selection = listbox.curselection()
@@ -339,7 +359,7 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
             return
         idx = selection[0]
         key = service_keys[idx]
-        edit_service_dialog(services, key, save_callback, refresh_list)
+        edit_service_dialog(services, key, save_callback, refresh_list, refresh_callback)
 
     def delete_service():
         selection = listbox.curselection()
@@ -352,6 +372,8 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
             del services[key]
             save_callback()
             refresh_list()
+            if refresh_callback:
+                refresh_callback()
 
     def toggle_service():
         selection = listbox.curselection()
@@ -362,6 +384,8 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
         services[key]["enabled"] = not services[key].get("enabled", True)
         save_callback()
         refresh_list(select_key=key)
+        if refresh_callback:
+            refresh_callback()
 
     def finish():
         if on_finish:
@@ -583,7 +607,7 @@ def show_warning(title, message):
 def show_error(title, message):
     box.showerror(title, message)
 
-def add_service_dialog(services, save_callback, refresh_callback, service_type):
+def add_service_dialog(services, save_callback, refresh_list, service_type, refresh_callback=None):
     """Окно добавления новой услуги"""
     win = Toplevel()
     win.title("Добавление услуги")
@@ -670,7 +694,9 @@ def add_service_dialog(services, save_callback, refresh_callback, service_type):
                 return
         services[key] = new_service
         save_callback()
-        refresh_callback()
+        refresh_list()
+        if refresh_callback:
+            refresh_callback()
         win.destroy()
 
     Button(win, text="Сохранить", command=save_new, bg="lightgreen", width=15).pack(pady=10)
@@ -695,7 +721,7 @@ def choose_type_dialog(callback):
 
     Button(win, text="Далее", command=on_next, bg="lightblue", width=10).pack(pady=10)
 
-def edit_service_dialog(services, key, save_callback, refresh_callback):
+def edit_service_dialog(services, key, save_callback, refresh_list, refresh_callback=None):
     """Окно редактирования услуг"""
     service = services[key]
     win = Toplevel()
@@ -789,7 +815,9 @@ def edit_service_dialog(services, key, save_callback, refresh_callback):
             del services[key]
         services[new_key] = updated_service
         save_callback()
-        refresh_callback()
+        refresh_list()
+        if refresh_callback:
+            refresh_callback()
         win.destroy()
 
     Button(win, text="Сохранить", command=save_edit, bg="lightgreen", width=15).pack(pady=10)

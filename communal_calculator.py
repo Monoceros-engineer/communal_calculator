@@ -72,6 +72,7 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
             else:  # fixed
                 result = calculate_fixed_service(name, tariff, has_commission, fee)
                 results_data.append(result)
+                costs[key] = result["Amount"]
                 # Для fixed не обновляем current_readings и costs (они не нужны для сохранения)
 
         if not results_data:
@@ -83,9 +84,15 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
         total_sum_with_fee = sum(item["Total"] for item in results_data)
 
         def save_readings(current_readings, costs, total_sum_with_fee):
+            # Сохраняем историю
+            save_readings_to_history(current_readings, costs, total_sum_with_fee)
+
+            # Обновляем начальные значения в services для всех meter-услуг
             for key, reading in current_readings.items():
                 if key in services and services[key]["type"] == "metered":
                     services[key]["start_value"] = reading
+
+            # Сохраняем services в файл
             save_services_callback()
 
         show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, save_readings, services)
@@ -93,9 +100,6 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
     except Exception as e:
         error_callback("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
 
-def save_readings(current_readings, costs, total_sum_with_fee):
-    """Сохраняет показания в историю, обновляет начальные значения."""
-    save_readings_to_history(current_readings, costs, total_sum_with_fee)
 
 def save_initial_settings_multi(initial_values, services, save_services_callback):
     """Сохраняет начальные значения для нескольких услуг (по счётчику)."""

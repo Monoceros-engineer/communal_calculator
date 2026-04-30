@@ -37,11 +37,8 @@ def save_settings():
     except:
         return False
     
-def save_readings_to_history(current_readings, costs, total_sum_with_fee):
-    """Сохраняет текущие показания в историю и обновляет начальные значения"""
-    global start_value_gas, start_value_electricity, start_value_water
-
-    # Загружаем существующую историю
+def save_readings_to_history(current_readings, costs, total):
+    """Сохраняет текущие показания и затраты в историю (JSON)."""
     history = []
     if os.path.exists(HISTORY_FILE):
         try:
@@ -50,34 +47,15 @@ def save_readings_to_history(current_readings, costs, total_sum_with_fee):
         except:
             history = []
 
-    # Создаем запись о текущем расчете
     record = {
         "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-        "readings": {
-            "gas": current_readings["gas"],
-            "electricity": current_readings["electricity"],
-            "water": current_readings["water"],
-        },
-        "costs": {
-            "gas": float(costs["gas"]),
-            "electricity": float(costs["electricity"]),
-            "water": float(costs["water"]),
-        },
-        "total": float(total_sum_with_fee),
+        "readings": current_readings.copy(),   # словарь всех показаний
+        "costs": {k: float(v) for k, v in costs.items()},
+        "total": float(total)
     }
-
     history.append(record)
 
-    # Сохраняем историю
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
-
-    # ОБНОВЛЯЕМ НАЧАЛЬНЫЕ ЗНАЧЕНИЯ текущими показаниями
-    start_value_gas = current_readings["gas"]
-    start_value_electricity = current_readings["electricity"]
-    start_value_water = current_readings["water"]
-
-    # Сохраняем обновленные начальные значения
-    save_settings()
 
     return True    
