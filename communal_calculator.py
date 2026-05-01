@@ -2,7 +2,13 @@ from calculator import calculate_service, calculate_fixed_service
 from gui import show_results_window
 import config
 from file_manager import save_settings, save_readings_to_history
-from decimal import Decimal, InvalidOperation
+
+def normalize_decimal(s):
+    """Преобразует строку с запятой или точкой в формат с точкой."""
+    s = s.strip().replace(',', '.')
+    # удаляем возможные пробелы между цифрами
+    s = s.replace(' ', '')
+    return s
 
 def get_services():
     """Возвращает словарь services со всеми параметрами."""
@@ -57,9 +63,10 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
                 value_str = entry.get().strip()
                 if not value_str:
                     continue
+                normalized = normalize_decimal(value_str)
                 has_commission = 1 if (checkboxes.get(key) and checkboxes.get(key).get()) else 0
                 try:
-                    result = calculate_service(name, value_str, service.get("start_value", 0), tariff, has_commission, fee)
+                    result = calculate_service(name, normalized, service.get("start_value", 0), tariff, has_commission, fee)
                 except ValueError as e:
                     error_callback(name, str(e))
                     return
@@ -67,7 +74,7 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
                     # этот случай невозможен, так как поле не пустое, но оставим
                     continue
                 results_data.append(result)
-                current_readings[key] = int(value_str)
+                current_readings[key] = float(normalized)
                 costs[key] = result["Amount"]
             else:  # fixed
                 result = calculate_fixed_service(name, tariff, has_commission, fee)
