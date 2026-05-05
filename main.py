@@ -1,6 +1,6 @@
 from tkinter import Tk
 from file_manager import load_settings
-from gui import open_manage_services_window, create_main_window
+from gui import open_manage_services_window, create_main_window, show_tutorial
 from communal_calculator import (
     get_services, save_services, calculate_dynamic,
     save_tariffs, save_fees, save_initial_settings_multi
@@ -11,6 +11,8 @@ if __name__ == "__main__":
     if is_first_run:
         root = Tk()
         root.withdraw()  # скрываем корневое окно
+        tutorial = show_tutorial()
+        root.wait_window(tutorial)
 
         def on_first_run_finish():
             root.quit()  # завершаем цикл событий, но окно не уничтожаем

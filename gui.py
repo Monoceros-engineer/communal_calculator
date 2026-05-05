@@ -2,6 +2,52 @@ from tkinter import *
 import tkinter.messagebox as box
 from datetime import datetime
 
+def add_tooltip(widget, text):
+    """Привязывает к виджету всплывающую подсказку с улучшенным внешним видом."""
+    def show_tip(event):
+        tip = Toplevel(widget)
+        tip.wm_overrideredirect(True)
+        # Позиционируем чуть ниже и правее курсора
+        tip.wm_geometry(f"+{event.x_root+15}+{event.y_root+20}")
+        label = Label(tip, text=text, background="#ffff99", foreground="black",
+                      relief="solid", borderwidth=1, padx=12, pady=8,
+                      font=("Arial", 10, "bold"))
+        label.pack()
+        widget.tip = tip
+    def hide_tip(event):
+        if hasattr(widget, 'tip'):
+            widget.tip.destroy()
+    widget.bind('<Enter>', show_tip)
+    widget.bind('<Leave>', hide_tip)
+
+def show_tutorial():
+    """Показывает небольшое окно-туториал при первом запуске."""
+    tutorial = Toplevel()
+    tutorial.title("Добро пожаловать!")
+    tutorial.geometry("600x430")
+    tutorial.resizable(0,0)
+    tutorial.grab_set()
+
+    Label(tutorial, text="Добро пожаловать в калькулятор коммунальных услуг!\n" \
+    "Давайте начнем с настройки программы.\n Для того, чтобы все работало,\n необходимо сделать несколько простых шагов:", 
+    font=("Arial", 14, "bold")).pack(pady=10)
+    Label(tutorial, text="1. Нажмите кнопку 'Добавить', чтобы создать услугу, расход по которой вы будете считать\n"
+    " (газ, свет, вода и т.д.).", font=("Arial", 10), justify="left", anchor="w").pack(pady=5, padx=20, anchor="w")
+    Label(tutorial, text="2. Выберите тип услуги: 'По счётчику' или 'Фиксированная'.", 
+          font=("Arial", 10), justify="left", anchor="w").pack(pady=5, padx=20, anchor="w")
+    Label(tutorial, text="3. Заполните название, тариф, комиссию (если есть).\n   " \
+    "Для услуг по счётчику также укажите начальные показания \n(то есть те показания счетчика, которые вы передавали при прошлой оплате услуги).", 
+          font=("Arial", 10), justify="left", anchor="w").pack(pady=5, padx=20, anchor="w")
+    Label(tutorial, text="4. После добавления всех услуг закройте окно управления.", 
+          font=("Arial", 10), justify="left", anchor="w").pack(pady=5, padx=20, anchor="w")
+    Label(tutorial, text="5. В главном окне вводите текущие показания и нажимайте 'Рассчитать'.", 
+          font=("Arial", 10), justify="left", anchor="w").pack(pady=5, padx=20, anchor="w")
+    Label(tutorial, text="Совет: Наводите курсор на кнопки — появятся подсказки.", font=("Arial", 9), fg="blue").pack(pady=10)
+
+    Button(tutorial, text="Начать", command=tutorial.destroy, bg="lightgreen", width=15).pack(pady=20)
+
+    return tutorial
+
 
 #Создаем главное окно
 def create_main_window(calculate_func, start_values, save_initial_callback,
@@ -400,6 +446,12 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
         btn_finish.config(command=finish)
     if btn_close:
         btn_close.config(command=win.destroy)
+
+    # Тултипы
+    add_tooltip(btn_add, "Добавить новую услугу (например, газ, электричество, интернет)")
+    add_tooltip(btn_edit, "Редактировать выбранную услугу")
+    add_tooltip(btn_delete, "Удалить выбранную услугу")
+    add_tooltip(btn_toggle, "Включить/отключить услугу (отключённые не отображаются в главном окне)")
 
 
 
