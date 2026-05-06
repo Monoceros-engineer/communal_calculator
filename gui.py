@@ -20,9 +20,9 @@ def add_tooltip(widget, text):
     widget.bind('<Enter>', show_tip)
     widget.bind('<Leave>', hide_tip)
 
-def show_tutorial():
+def show_tutorial(parent=None):
     """Показывает небольшое окно-туториал при первом запуске."""
-    tutorial = Toplevel()
+    tutorial = Toplevel(parent) if parent else Toplevel()
     tutorial.title("Добро пожаловать!")
     tutorial.geometry("600x430")
     tutorial.resizable(0,0)
@@ -52,10 +52,16 @@ def show_tutorial():
 #Создаем главное окно
 def create_main_window(calculate_func, start_values, save_initial_callback,
                        tariffs, save_tariffs_callback, fees, save_fees_callback,
-                       services, save_services_callback):
-    window = Tk()
+                       services, save_services_callback, parent=None):
+    print("=== CREATE MAIN WINDOW: SERVICES FEES ===")
+    for k, s in services.items():
+        print(f"{k}: fee = {s.get('fee')}")
+    if parent:
+        window = Toplevel(parent)
+    else:
+        window = Tk()
     window.title("Калькулятор коммуналки")
-    window.resizable(0,0)
+    
     
     # Информационное сообщение о начальных значениях
     msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
@@ -68,15 +74,16 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     # Словари для виджетов
     entries = {}
     checkboxes = {}
-    checkbox_texts = {}
+    checkbox_widgets = {}
 
     # Функция обновления текста чекбоксов (будет вызываться после изменения комиссий)
     def update_checkbutton_texts():
         for key, service in services.items():
-            if key in checkbox_texts:
+            if key in checkbox_widgets:
                 new_text = f"{int(service.get('fee', 0.0) * 100)}%"
-                checkbox_texts[key].set(new_text)
+                checkbox_widgets[key].config(text=new_text)
 
+ 
     # Верхняя панель
     current_date = datetime.now().strftime("%d.%m.%Y")
     label_date = Label(window, text=f"Сегодня: {current_date}", font=("Arial", 10))
@@ -95,6 +102,7 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
 
     def refresh_services_callback():
         rebuild_services_frame()
+        update_checkbutton_texts()
 
     # Заголовки колонок
     Label(window, text="Ресурс", font=("Arial", 10, "bold")).grid(row=1, column=0, padx=5, pady=5)
@@ -105,20 +113,16 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     services_frame = Frame(window)
     services_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
-    # Словари для виджетов (будут заполняться в build_services_frame)
-    entries = {}
-    checkboxes = {}
-    checkbox_texts = {}
-
-    def build_services_frame(frame, services, entries, checkboxes, checkbox_texts, window):
+    def build_services_frame(frame, services, entries, checkboxes, checkbox_widgets, window):
         # очищаем фрейм перед построением
         for widget in frame.winfo_children():
             widget.destroy()
         entries.clear()
         checkboxes.clear()
-        checkbox_texts.clear()
+        checkbox_widgets.clear()
         row = 0
         for key, service in services.items():
+            print(f"Building {key}, fee = {service['fee']}")
             if not service.get("enabled", True):
                 continue
             # Название
@@ -132,17 +136,19 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
                 Label(frame, text="—", width=20, relief="ridge").grid(row=row, column=1, padx=5, pady=5)
             # Чекбокс комиссии
             var = IntVar()
-            text_var = StringVar(value=f"{int(service['fee']*100)}%")
-            Checkbutton(frame, textvariable=text_var, variable=var).grid(row=row, column=2, padx=5, pady=5)
+            cb = Checkbutton(frame, text=f"{int(service['fee']*100)}%", variable=var)
+            cb.grid(row=row, column=2, padx=5, pady=5)
             checkboxes[key] = var
-            checkbox_texts[key] = text_var
+            checkbox_widgets[key] = cb
             row += 1
 
     def rebuild_services_frame():
-        build_services_frame(services_frame, services, entries, checkboxes, checkbox_texts, window)
+        build_services_frame(services_frame, services, entries, checkboxes, checkbox_widgets, window)
+        print("After rebuild, checkbox_texts keys:", list(checkbox_widgets.keys()))
 
     # Построение интерфейса услуг при запуске
     rebuild_services_frame()
+    update_checkbutton_texts()
 
     btn_check = Button(
         window,
@@ -158,7 +164,6 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     for col in range(3):
         window.grid_columnconfigure(col, weight=0, minsize=100)
 
-    rebuild_services_frame()
 
     return window
 
@@ -317,8 +322,8 @@ def open_fee_window(services, save_fees_callback, update_callback):
     Button(scrollable_frame, text="Сохранить", command=save_fees, bg="lightgreen", width=10).grid(row=row, column=0, pady=20)
     Button(scrollable_frame, text="Отмена", command=win.destroy, bg="lightcoral", width=10).grid(row=row, column=1, pady=20)
 
-def open_manage_services_window(services, save_callback, first_run=False, on_finish=None, refresh_callback=None):
-    win = Toplevel()
+def open_manage_services_window(services, save_callback, first_run=False, on_finish=None, refresh_callback=None, parent=None):
+    win = Toplevel(parent) if parent else Toplevel()
     win.title("Управление услугами" if not first_run else "Настройка услуг (первый запуск)")
     win.geometry("600x450")
     win.resizable(0,0)
@@ -434,9 +439,11 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
             refresh_callback()
 
     def finish():
+        print("Finish called")
         if on_finish:
             on_finish()
         win.destroy()
+        print("Window destroyed")
 
     btn_add.config(command=add_service)
     btn_edit.config(command=edit_service)
@@ -665,7 +672,7 @@ def add_service_dialog(services, save_callback, refresh_list, service_type, refr
     win.title("Добавление услуги")
     win.geometry("400x450" if service_type == "metered" else "400x350")
     win.resizable(0,0)
-    win.grab_set()
+    #win.grab_set()
 
     Label(win, text="Новая услуга", font=("Arial", 12, "bold")).pack(pady=10)
 
@@ -760,7 +767,7 @@ def choose_type_dialog(callback):
     win.title("Выбор типа услуги")
     win.geometry("300x150")
     win.resizable(0,0)
-    win.grab_set()
+    #win.grab_set()
 
     Label(win, text="Выберите тип услуги:", font=("Arial", 11)).pack(pady=10)
     type_var = StringVar(value="metered")
