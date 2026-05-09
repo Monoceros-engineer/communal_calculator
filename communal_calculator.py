@@ -40,7 +40,7 @@ def get_fees():
 
 # ФУНКЦИИ ДЛЯ ОСНОВНОГО РАСЧЕТА
 
-def calculate_dynamic(entries, checkboxes, services, warning_callback, error_callback, save_services_callback):
+def calculate_dynamic(entries, services_frame, services, warning_callback, error_callback, save_services_callback):
     try:
         results_data = []
         current_readings = {}
@@ -54,7 +54,14 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
             service_type = service["type"]
             tariff = service["tariff"]
             fee = service["fee"]
-            has_commission = checkboxes.get(key).get() if checkboxes.get(key) else 0
+            # Получаем состояние чекбокса напрямую из виджета
+            has_commission = 0
+            for child in services_frame.winfo_children():
+                if hasattr(child, 'service_key') and child.service_key == key:
+                    print(f"Found child: {child.service_key}, var={child.var.get() if hasattr(child,'var') else None}")
+                    has_commission = child.var.get() if hasattr(child, 'var') else 0
+                    break
+            print(f"DEBUG: {key} has_commission = {has_commission}")
 
             if service_type == "metered":
                 entry = entries.get(key)
@@ -64,14 +71,12 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
                 if not value_str:
                     continue
                 normalized = normalize_decimal(value_str)
-                has_commission = 1 if (checkboxes.get(key) and checkboxes.get(key).get()) else 0
                 try:
                     result = calculate_service(name, normalized, service.get("start_value", 0), tariff, has_commission, fee)
                 except ValueError as e:
                     error_callback(name, str(e))
                     return
                 if result is None:
-                    # этот случай невозможен, так как поле не пустое, но оставим
                     continue
                 results_data.append(result)
                 current_readings[key] = float(normalized)
@@ -80,7 +85,6 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
                 result = calculate_fixed_service(name, tariff, has_commission, fee)
                 results_data.append(result)
                 costs[key] = result["Amount"]
-                # Для fixed не обновляем current_readings и costs (они не нужны для сохранения)
 
         if not results_data:
             warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
@@ -91,20 +95,16 @@ def calculate_dynamic(entries, checkboxes, services, warning_callback, error_cal
         total_sum_with_fee = sum(item["Total"] for item in results_data)
 
         def save_readings(current_readings, costs, total_sum_with_fee):
-            # Сохраняем историю
             save_readings_to_history(current_readings, costs, total_sum_with_fee)
-
-            # Обновляем начальные значения в services для всех meter-услуг
             for key, reading in current_readings.items():
                 if key in services and services[key]["type"] == "metered":
                     services[key]["start_value"] = reading
-
-            # Сохраняем services в файл
             save_services_callback()
 
         show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, save_readings, services)
 
     except Exception as e:
+        print(f"ERROR in calculate_dynamic: {e}")
         error_callback("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
 
 

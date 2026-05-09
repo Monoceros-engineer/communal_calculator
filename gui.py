@@ -73,7 +73,6 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
 
     # Словари для виджетов
     entries = {}
-    checkboxes = {}
     checkbox_widgets = {}
 
     # Функция обновления текста чекбоксов (будет вызываться после изменения комиссий)
@@ -113,12 +112,11 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     services_frame = Frame(window)
     services_frame.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
 
-    def build_services_frame(frame, services, entries, checkboxes, checkbox_widgets, window):
+    def build_services_frame(frame, services, entries, checkbox_widgets, window):
         # очищаем фрейм перед построением
         for widget in frame.winfo_children():
             widget.destroy()
         entries.clear()
-        checkboxes.clear()
         checkbox_widgets.clear()
         row = 0
         for key, service in services.items():
@@ -127,6 +125,16 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
                 continue
             # Название
             Label(frame, text=service["name"], font=("Arial", 10)).grid(row=row, column=0, padx=5, pady=5, sticky="w")
+            var = IntVar()
+            def on_check(k=key, v=var):
+                var.set(not var.get())
+                print(f"Checkbutton {k} clicked, var={v.get()}")
+            cb = Checkbutton(frame, text=f"{int(service['fee']*100)}%", variable=var, command=on_check)
+            print(f"Created {key} with var={var}")
+            cb.var = var  # сохраняем переменную в виджете
+            cb.service_key = key
+            cb.grid(row=row, column=2, padx=5, pady=5)
+            checkbox_widgets[key] = cb
             # Поле ввода (только для metered)
             if service["type"] == "metered":
                 entry = Entry(frame, width=20)
@@ -135,16 +143,12 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
             else:
                 Label(frame, text="—", width=20, relief="ridge").grid(row=row, column=1, padx=5, pady=5)
             # Чекбокс комиссии
-            var = IntVar()
-            cb = Checkbutton(frame, text=f"{int(service['fee']*100)}%", variable=var)
-            cb.grid(row=row, column=2, padx=5, pady=5)
-            checkboxes[key] = var
-            checkbox_widgets[key] = cb
+
             row += 1
 
     def rebuild_services_frame():
-        build_services_frame(services_frame, services, entries, checkboxes, checkbox_widgets, window)
-        print("After rebuild, checkbox_texts keys:", list(checkbox_widgets.keys()))
+        build_services_frame(services_frame, services, entries, checkbox_widgets, window)
+        print("After rebuild, checkbox_widgets keys:", list(checkbox_widgets.keys()))
 
     # Построение интерфейса услуг при запуске
     rebuild_services_frame()
@@ -153,7 +157,7 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     btn_check = Button(
         window,
         text="Рассчитать",
-        command=lambda: calculate_func(entries, checkboxes, services, show_warning, show_error, save_services_callback),
+        command=lambda: calculate_func(entries, services_frame, services, show_warning, show_error, save_services_callback),
         bg="lightblue",
         font=("Arial", 12),
         width=20,
