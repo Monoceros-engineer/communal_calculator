@@ -127,7 +127,7 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
             Label(frame, text=service["name"], font=("Arial", 10)).grid(row=row, column=0, padx=5, pady=5, sticky="w")
             var = IntVar()
             def on_check(k=key, v=var):
-                var.set(not var.get())
+                v.set(not v.get())
                 print(f"Checkbutton {k} clicked, var={v.get()}")
             cb = Checkbutton(frame, text=f"{int(service['fee']*100)}%", variable=var, command=on_check)
             print(f"Created {key} with var={var}")
