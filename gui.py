@@ -125,13 +125,12 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
                 continue
             # Название
             Label(frame, text=service["name"], font=("Arial", 10)).grid(row=row, column=0, padx=5, pady=5, sticky="w")
-            var = IntVar()
-            def on_check(k=key, v=var):
-                v.set(not v.get())
-                print(f"Checkbutton {k} clicked, var={v.get()}")
-            cb = Checkbutton(frame, text=f"{int(service['fee']*100)}%", variable=var, command=on_check)
-            print(f"Created {key} with var={var}")
-            cb.var = var  # сохраняем переменную в виджете
+            cb = Checkbutton(frame, text=f"{int(service['fee']*100)}%")
+            cb.checked = False
+            def on_check(c=cb, k=key):
+                c.checked = not c.checked
+                print(f"Checkbutton {k} clicked, checked={c.checked}")
+            cb.config(command=on_check)
             cb.service_key = key
             cb.grid(row=row, column=2, padx=5, pady=5)
             checkbox_widgets[key] = cb

@@ -58,8 +58,8 @@ def calculate_dynamic(entries, services_frame, services, warning_callback, error
             has_commission = 0
             for child in services_frame.winfo_children():
                 if hasattr(child, 'service_key') and child.service_key == key:
-                    print(f"Found child: {child.service_key}, var={child.var.get() if hasattr(child,'var') else None}")
-                    has_commission = child.var.get() if hasattr(child, 'var') else 0
+                    print(f"Found child: {child.service_key}, checked={getattr(child, 'checked', False)}")
+                    has_commission = 1 if getattr(child, 'checked', False) else 0
                     break
             print(f"DEBUG: {key} has_commission = {has_commission}")
 
