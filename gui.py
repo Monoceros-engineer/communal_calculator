@@ -670,12 +670,10 @@ def show_error(title, message):
     box.showerror(title, message)
 
 def add_service_dialog(services, save_callback, refresh_list, service_type, refresh_callback=None):
-    """Окно добавления новой услуги"""
     win = Toplevel()
     win.title("Добавление услуги")
     win.geometry("400x450" if service_type == "metered" else "400x350")
     win.resizable(0,0)
-    #win.grab_set()
 
     Label(win, text="Новая услуга", font=("Arial", 12, "bold")).pack(pady=10)
 
@@ -693,27 +691,49 @@ def add_service_dialog(services, save_callback, refresh_list, service_type, refr
         Label(frame, text="Начальное значение:").grid(row=row, column=0, sticky="e", pady=5)
         start_entry = Entry(frame, width=25)
         start_entry.grid(row=row, column=1, pady=5)
-        start_entry.insert(0, "0")
         row += 1
 
     # Тариф
     Label(frame, text="Тариф (руб.):").grid(row=row, column=0, sticky="e", pady=5)
     tariff_entry = Entry(frame, width=25)
     tariff_entry.grid(row=row, column=1, pady=5)
-    tariff_entry.insert(0, "0.0")
     row += 1
 
     # Комиссия (%)
     Label(frame, text="Комиссия (%):").grid(row=row, column=0, sticky="e", pady=5)
     fee_entry = Entry(frame, width=25)
     fee_entry.grid(row=row, column=1, pady=5)
-    fee_entry.insert(0, "0")
     row += 1
+
+    # Добавляем плейсхолдеры (без предварительной вставки)
+    def add_placeholder(entry, placeholder):
+        entry.insert(0, placeholder)
+        entry.config(fg="gray")
+        def on_focus_in(e):
+            if entry.get() == placeholder:
+                entry.delete(0, END)
+                entry.config(fg="black")
+        def on_focus_out(e):
+            if entry.get() == "":
+                entry.insert(0, placeholder)
+                entry.config(fg="gray")
+        entry.bind("<FocusIn>", on_focus_in)
+        entry.bind("<FocusOut>", on_focus_out)
+
+    # Импортируем normalize_decimal (или определим здесь)
+    from communal_calculator import normalize_decimal
+
+    # Создаём плейсхолдеры
+    if service_type == "metered":
+        add_placeholder(start_entry, "0")
+    add_placeholder(tariff_entry, "0.0")
+    add_placeholder(fee_entry, "0")
 
     enabled_var = BooleanVar(value=True)
     Checkbutton(frame, text="Включена", variable=enabled_var).grid(row=row, column=1, sticky="w", pady=5)
 
     def save_new():
+        # Получаем название
         name = name_entry.get().strip()
         if not name:
             box.showerror("Ошибка", "Введите название услуги")
@@ -722,21 +742,31 @@ def add_service_dialog(services, save_callback, refresh_list, service_type, refr
         if key in services:
             box.showerror("Ошибка", "Услуга с таким названием уже существует")
             return
-        try:
-            tariff = float(tariff_entry.get())
-            if tariff <= 0:
-                raise ValueError
-        except:
+
+        # Функция для получения числа с учётом плейсхолдера и нормализации запятой
+        def get_float(entry, placeholder):
+            val = entry.get()
+            if val == placeholder or val == "":
+                return None
+            # Нормализуем разделитель
+            val = normalize_decimal(val)
+            try:
+                return float(val)
+            except:
+                return None
+
+        # Получаем тариф
+        tariff = get_float(tariff_entry, "0.0")
+        if tariff is None or tariff <= 0:
             box.showerror("Ошибка", "Тариф должен быть положительным числом")
             return
-        try:
-            fee_percent = float(fee_entry.get())
-            if fee_percent < 0 or fee_percent > 100:
-                raise ValueError
-            fee = fee_percent / 100.0
-        except:
+
+        # Получаем комиссию
+        fee_percent = get_float(fee_entry, "0")
+        if fee_percent is None or fee_percent < 0 or fee_percent > 100:
             box.showerror("Ошибка", "Комиссия должна быть от 0 до 100")
             return
+        fee = fee_percent / 100.0
 
         new_service = {
             "name": name,
@@ -745,15 +775,14 @@ def add_service_dialog(services, save_callback, refresh_list, service_type, refr
             "tariff": tariff,
             "fee": fee
         }
+
         if service_type == "metered":
-            try:
-                start_val = int(start_entry.get())
-                if start_val < 0:
-                    raise ValueError
-                new_service["start_value"] = start_val
-            except:
-                box.showerror("Ошибка", "Начальное значение должно быть неотрицательным целым")
+            start_val = get_float(start_entry, "0")
+            if start_val is None or start_val < 0:
+                box.showerror("Ошибка", "Начальное значение должно быть неотрицательным числом")
                 return
+            new_service["start_value"] = start_val
+
         services[key] = new_service
         save_callback()
         refresh_list()
