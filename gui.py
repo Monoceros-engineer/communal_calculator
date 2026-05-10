@@ -20,9 +20,9 @@ def add_tooltip(widget, text):
     widget.bind('<Enter>', show_tip)
     widget.bind('<Leave>', hide_tip)
 
-def show_tutorial(parent=None):
+def show_tutorial():
     """Показывает небольшое окно-туториал при первом запуске."""
-    tutorial = Toplevel(parent) if parent else Toplevel()
+    tutorial = Toplevel()
     tutorial.title("Добро пожаловать!")
     tutorial.geometry("600x430")
     tutorial.resizable(0,0)
@@ -405,7 +405,7 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
 
     # --- функции для кнопок ---
     def add_service():
-        choose_type_dialog(lambda st: add_service_dialog(services, save_callback, refresh_list, st, refresh_callback))
+        choose_type_dialog(win, lambda st: add_service_dialog(services, save_callback, refresh_list, st, refresh_callback))
 
     def edit_service():
         selection = listbox.curselection()
@@ -443,10 +443,9 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
 
     def finish():
         print("Finish called")
-        if on_finish:
-            on_finish()
+        win.withdraw()  # скрываем окно, чтобы оно исчезло с экрана
+        win.grab_release()
         win.destroy()
-        print("Window destroyed")
 
     btn_add.config(command=add_service)
     btn_edit.config(command=edit_service)
@@ -462,6 +461,8 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
     add_tooltip(btn_edit, "Редактировать выбранную услугу")
     add_tooltip(btn_delete, "Удалить выбранную услугу")
     add_tooltip(btn_toggle, "Включить/отключить услугу (отключённые не отображаются в главном окне)")
+
+    return win
 
 
 
@@ -793,13 +794,13 @@ def add_service_dialog(services, save_callback, refresh_list, service_type, refr
     Button(win, text="Сохранить", command=save_new, bg="lightgreen", width=15).pack(pady=10)
     Button(win, text="Отмена", command=win.destroy, bg="lightcoral", width=15).pack(pady=5)
 
-def choose_type_dialog(callback):
+def choose_type_dialog(parent, callback):
     """Выбирает тип услуги: фиксированный или по счетчику"""
-    win = Toplevel()
+    win = Toplevel(parent)
     win.title("Выбор типа услуги")
     win.geometry("300x150")
     win.resizable(0,0)
-    #win.grab_set()
+    win.grab_set()
 
     Label(win, text="Выберите тип услуги:", font=("Arial", 11)).pack(pady=10)
     type_var = StringVar(value="metered")
