@@ -61,6 +61,7 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
     else:
         window = Tk()
     window.title("Калькулятор коммуналки")
+    window.resizable(0,0)
     
     
     # Информационное сообщение о начальных значениях
@@ -258,10 +259,11 @@ def open_tarif_window(services, save_tariffs_callback):
         row += 1
 
     def save_tariffs():
+        from communal_calculator import normalize_decimal
         new_tariffs = {}
         try:
             for key, var in vars.items():
-                val = float(var.get())
+                val = float(normalize_decimal(var.get()))
                 if val <= 0:
                     raise ValueError
                 new_tariffs[key] = val
@@ -308,10 +310,11 @@ def open_fee_window(services, save_fees_callback, update_callback):
         row += 1
 
     def save_fees():
+        from communal_calculator import normalize_decimal
         new_fees = {}
         try:
             for key, var in vars.items():
-                val = float(var.get())
+                val = float(normalize_decimal(var.get()))
                 if val < 0 or val > 100:
                     raise ValueError
                 new_fees[key] = val / 100.0
