@@ -2,6 +2,22 @@ from tkinter import *
 import tkinter.messagebox as box
 from datetime import datetime
 
+def open_help():
+    """Открывает файл README.md в стандартном просмотрщике (Блокнот или браузер)"""
+    import os
+    import sys
+    # Определяем путь к файлу README.md (в папке с программой)
+    if getattr(sys, 'frozen', False):
+        # Если запущено из .exe
+        base_path = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(sys.executable)
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    readme_path = os.path.join(base_path, 'README.md')
+    if os.path.exists(readme_path):
+        os.startfile(readme_path)
+    else:
+        box.showerror("Ошибка", "Файл справки (README.md) не найден.")
+
 def add_tooltip(widget, text):
     """Привязывает к виджету всплывающую подсказку с улучшенным внешним видом."""
     def show_tip(event):
@@ -99,6 +115,9 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
         )
     )
     btn_settings.grid(row=0, column=2, padx=10, pady=10, sticky="e")
+
+    btn_help = Button(window, text="Помощь", bg="lightgray", command=open_help, width=8)
+    btn_help.grid(row=0, column=3, padx=10, pady=10, sticky="e")
 
     def refresh_services_callback():
         rebuild_services_frame()
@@ -222,6 +241,8 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
         font=("Arial", 11),
         width=20,
     ).pack(pady=20)
+
+    Button(settings_window, text="Помощь", command=open_help, bg="lightblue", width=20).pack(pady=5)
 
 
    
