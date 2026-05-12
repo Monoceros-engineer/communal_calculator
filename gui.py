@@ -4,7 +4,6 @@ from datetime import datetime
 import sys
 import os
 import webbrowser
-import tempfile
 
 def resource_path(relative_path):
     """ Получить абсолютный путь к ресурсу, работает для разработки и для PyInstaller """
@@ -59,6 +58,18 @@ def open_help():
     webbrowser.open(temp_html)
     # Файл останется в временной папке; при следующем запуске будет создан новый – это нормально.
 
+def set_window_icon(win):
+    def _set():
+        try:
+            png_path = resource_path('icon.png')  # используем PNG
+            if os.path.exists(png_path):
+                img = PhotoImage(file=png_path)
+                win.iconphoto(True, img)
+                win._icon_img = img  # сохраняем ссылку, чтобы изображение не удалилось
+        except:
+            pass
+    win.after_idle(_set)
+
 def add_tooltip(widget, text):
     """Привязывает к виджету всплывающую подсказку с улучшенным внешним видом."""
     def show_tip(event):
@@ -80,6 +91,7 @@ def add_tooltip(widget, text):
 def show_tutorial():
     """Показывает небольшое окно-туториал при первом запуске."""
     tutorial = Toplevel()
+    #set_window_icon(tutorial)
     tutorial.title("Добро пожаловать!")
     tutorial.geometry("600x430")
     tutorial.resizable(0,0)
@@ -117,6 +129,8 @@ def create_main_window(calculate_func, start_values, save_initial_callback,
         window = Toplevel(parent)
     else:
         window = Tk()
+
+    set_window_icon(window)
     window.title("Калькулятор коммуналки")
     window.resizable(0,0)
     
@@ -236,6 +250,7 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
                          refresh_callback):
     """Открывает главное окно настроек"""
     settings_window = Toplevel()
+    #set_window_icon(settings_window)
     settings_window.title("Настройки")
     settings_window.geometry("300x350")
     settings_window.resizable(0,0)
@@ -289,6 +304,7 @@ def open_settings_window(tariffs, save_tariffs_callback, fees, save_fees_callbac
    
 def open_tarif_window(services, save_tariffs_callback):
     win = Toplevel()
+    #set_window_icon(win)
     win.title("Редактирование тарифов")
     win.geometry("400x400")
     win.resizable(0,0)
@@ -340,6 +356,7 @@ def open_tarif_window(services, save_tariffs_callback):
 
 def open_fee_window(services, save_fees_callback, update_callback):
     win = Toplevel()
+    #set_window_icon(win)
     win.title("Редактирование комиссии")
     win.geometry("400x400")
     win.resizable(0,0)
@@ -392,6 +409,7 @@ def open_fee_window(services, save_fees_callback, update_callback):
 
 def open_manage_services_window(services, save_callback, first_run=False, on_finish=None, refresh_callback=None, parent=None):
     win = Toplevel(parent) if parent else Toplevel()
+    #set_window_icon(win)
     win.title("Управление услугами" if not first_run else "Настройка услуг (первый запуск)")
     win.geometry("600x450")
     win.resizable(0,0)
@@ -534,6 +552,7 @@ def open_manage_services_window(services, save_callback, first_run=False, on_fin
 def show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, on_save, services):
     """Создает окно с результатами в виде таблицы и предлагает обновить начальные значения"""
     results_window = Toplevel()
+    #set_window_icon(results_window)
     results_window.title("Результаты расчета")
     results_window.resizable(0,0)
 
@@ -737,6 +756,7 @@ def show_error(title, message):
 
 def add_service_dialog(services, save_callback, refresh_list, service_type, refresh_callback=None):
     win = Toplevel()
+    #set_window_icon(win)
     win.title("Добавление услуги")
     win.geometry("400x450" if service_type == "metered" else "400x350")
     win.resizable(0,0)
@@ -862,6 +882,7 @@ def add_service_dialog(services, save_callback, refresh_list, service_type, refr
 def choose_type_dialog(parent, callback):
     """Выбирает тип услуги: фиксированный или по счетчику"""
     win = Toplevel(parent)
+    #set_window_icon(win)
     win.title("Выбор типа услуги")
     win.geometry("300x150")
     win.resizable(0,0)
@@ -882,6 +903,7 @@ def edit_service_dialog(services, key, save_callback, refresh_list, refresh_call
     """Окно редактирования услуг"""
     service = services[key]
     win = Toplevel()
+    #set_window_icon(win)
     win.title("Редактирование услуги")
     win.geometry("400x450" if service["type"] == "metered" else "400x350")
     win.resizable(0,0)
