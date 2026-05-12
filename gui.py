@@ -1,22 +1,63 @@
 from tkinter import *
 import tkinter.messagebox as box
 from datetime import datetime
+import sys
+import os
+import webbrowser
+import tempfile
+
+def resource_path(relative_path):
+    """ Получить абсолютный путь к ресурсу, работает для разработки и для PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 def open_help():
-    """Открывает файл README.md в стандартном просмотрщике (Блокнот или браузер)"""
-    import os
-    import sys
-    # Определяем путь к файлу README.md (в папке с программой)
+    # Получаем путь к README.md (встроенный или внешний)
     if getattr(sys, 'frozen', False):
-        # Если запущено из .exe
-        base_path = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(sys.executable)
+        exe_dir = os.path.dirname(sys.executable)
+        readme_path = os.path.join(exe_dir, 'README.md')
+        if not os.path.exists(readme_path):
+            readme_path = resource_path('README.md')
     else:
-        base_path = os.path.dirname(os.path.abspath(__file__))
-    readme_path = os.path.join(base_path, 'README.md')
-    if os.path.exists(readme_path):
-        os.startfile(readme_path)
-    else:
+        readme_path = resource_path('README.md')
+    
+    if not os.path.exists(readme_path):
         box.showerror("Ошибка", "Файл справки (README.md) не найден.")
+        return
+    
+    # Создаём временный HTML-файл
+    import tempfile
+    try:
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except:
+        box.showerror("Ошибка", "Не удалось прочитать файл справки.")
+        return
+    
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Справка - Калькулятор коммуналки</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; line-height: 1.4; }}
+        pre {{ white-space: pre-wrap; font-family: Arial, sans-serif; }}
+    </style>
+</head>
+<body>
+    <pre>{content}</pre>
+</body>
+</html>"""
+    
+    with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False, encoding='utf-8') as f:
+        f.write(html_content)
+        temp_html = f.name
+    
+    webbrowser.open(temp_html)
+    # Файл останется в временной папке; при следующем запуске будет создан новый – это нормально.
 
 def add_tooltip(widget, text):
     """Привязывает к виджету всплывающую подсказку с улучшенным внешним видом."""
