@@ -6,11 +6,12 @@ import os
 import webbrowser
 
 def resource_path(relative_path):
-    """ Получить абсолютный путь к ресурсу, работает для разработки и для PyInstaller """
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
+    """Получить путь к ресурсу, работает для разработки, PyInstaller и cx_Freeze"""
+    if getattr(sys, 'frozen', False):
+        # исполняемый файл (PyInstaller или cx_Freeze)
+        base_path = os.path.dirname(sys.executable)
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
 def open_help():
