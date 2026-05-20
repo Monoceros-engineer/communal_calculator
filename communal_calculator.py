@@ -2,6 +2,7 @@ from calculator import calculate_service, calculate_fixed_service
 from gui import show_results_window
 import config
 from file_manager import save_settings, save_readings_to_history
+from decimal import Decimal, InvalidOperation
 
 def normalize_decimal(s):
     """Преобразует строку с запятой или точкой в формат с точкой."""
@@ -133,3 +134,83 @@ def save_services():
     """Сохраняет текущее состояние services в файл."""
     from file_manager import save_settings
     save_settings()
+
+def process_services_data(readings, commissions, warning_callback=None, error_callback=None):
+    """
+    Обрабатывает услуги на основе введённых показаний и состояния чекбоксов комиссии.
+    readings: dict {service_key: str} – строковые показания (могут быть пустыми)
+    commissions: dict {service_key: bool} – True если комиссия включена
+    Возвращает кортеж (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee)
+    """
+    results_data = []
+    current_readings = {}
+    costs = {}
+    total_amount = Decimal('0')
+    total_fee = Decimal('0')
+    total_sum_with_fee = Decimal('0')
+    
+    for key, service in config.services.items():
+        if not service.get("enabled", True):
+            continue
+        name = service["name"]
+        service_type = service["type"]
+        tariff = service["tariff"]
+        fee = service["fee"]
+        has_commission = commissions.get(key, False)
+        
+        if service_type == "metered":
+            value_str = readings.get(key, "").strip()
+            if not value_str:
+                continue  # пропускаем пустые поля
+            # нормализуем запятую
+            normalized = normalize_decimal(value_str)  # предполагаем, что normalize_decimal уже определена
+            try:
+                end = Decimal(normalized)
+                start = Decimal(service.get("start_value", 0))
+                consumption = end - start
+                amount = consumption * Decimal(str(tariff))
+                if has_commission:
+                    fee_amount = amount * Decimal(str(fee))
+                else:
+                    fee_amount = Decimal('0')
+                total = amount + fee_amount
+            except InvalidOperation:
+                if error_callback:
+                    error_callback(name, "Введите корректное число!")
+                else:
+                    raise ValueError(f"В поле '{name}' введите корректное число!")
+                return None
+            result = {
+                "Name": name,
+                "Start value": start,
+                "End value": end,
+                "Consumption": consumption,
+                "Tariff": tariff,
+                "Amount": amount,
+                "Fee": fee_amount,
+                "Total": total
+            }
+            results_data.append(result)
+            current_readings[key] = float(end)
+            costs[key] = amount
+            total_amount += amount
+            total_fee += fee_amount
+            total_sum_with_fee += total
+        else:  # fixed
+            result = calculate_fixed_service(name, tariff, has_commission, fee)
+            results_data.append(result)
+            # для fixed нет показаний
+            costs[key] = result["Amount"]
+            total_amount += result["Amount"]
+            total_fee += result["Fee"]
+            total_sum_with_fee += result["Total"]
+    
+    if not results_data:
+        if warning_callback:
+            warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
+        else:
+            # можно вернуть пустые данные
+            pass
+        return None
+    
+    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee)
