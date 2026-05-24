@@ -27,7 +27,7 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(20, 20, 20, 20) # отступы слева/справа/сверху/снизу
         main_layout.setSpacing(15)
         
         # Верхняя панель с датой и кнопкой настроек (пока заглушка)
@@ -36,29 +36,29 @@ class MainWindow(QMainWindow):
         # Заголовки колонок (ресурс, показания, комиссия)
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(10, 10, 10, 10)   # отступы слева/справа/сверху/снизу
-        header_layout.setSpacing(20)                      # расстояние между элементами
+        header_layout.setSpacing(150)                      # расстояние между элементами
 
         res_label = QLabel("Ресурс")
-        res_label.setAlignment(Qt.AlignLeft)
-        header_layout.addWidget(res_label)
+        res_label.setAlignment(Qt.AlignLeft) #установка выравнивания содержимого метки (QLabel) по левому краю.
+        header_layout.addWidget(res_label) #добавление виджета (метки с текстом) в горизонтальный контейнер (layout)
 
         read_label = QLabel("Показания")
-        read_label.setAlignment(Qt.AlignLeft)
+        read_label.setAlignment(Qt.AlignLeft) # Устанавливаем выравнивание по левому краю
         header_layout.addWidget(read_label)
 
         comm_label = QLabel("Комиссия")
-        comm_label.setAlignment(Qt.AlignLeft)
+        comm_label.setAlignment(Qt.AlignLeft) # Устанавливаем выравнивание по левому краю
         header_layout.addWidget(comm_label)
 
         header_layout.addStretch()  # прижимает все элементы влево
-        main_layout.addLayout(header_layout)
+        main_layout.addLayout(header_layout) #добавление одного (дочернего) layout (контейнера header_layout) в другой (родительский) layout main_layout
         
         # Контейнер для динамических строк услуг
-        self.services_container = QWidget()
-        self.services_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
-        self.services_container.setMaximumWidth(500)
-        self.services_layout = QVBoxLayout(self.services_container)
-        self.services_layout.setContentsMargins(0, 0, 0, 0)
+        self.services_container = QWidget() # создаем пустой виджет-контейнер self.services_container для строк услуг
+        self.services_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding) # задаёт правила изменения размеров контейнера (self.services_container) при изменении размеров родительского окна (ширина фиксирована, а по высоте будет растягиваться)
+        self.services_container.setMaximumWidth(500) #ограничение максимальной ширины контейнера услуг в 500 пикселей
+        self.services_layout = QVBoxLayout(self.services_container) #создаёт вертикальный layout внутри self.services_container
+        self.services_layout.setContentsMargins(0, 0, 0, 0) # отступы слева/справа/сверху/снизу
         main_layout.addWidget(self.services_container)
         
         # Кнопка "Рассчитать"
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
             }
         """)
         calc_button.clicked.connect(self.calculate)
-        main_layout.addWidget(calc_button, alignment=Qt.AlignCenter)
+        main_layout.addWidget(calc_button, alignment=Qt.AlignCenter) # Устанавливаем выравнивание по центру
         calc_button.setObjectName("calculateButton")   # даём уникальное имя
         
         # Словари для хранения виджетов
@@ -109,13 +109,15 @@ class MainWindow(QMainWindow):
             fee_percent = int(service.get("fee", 0.0) * 100)
             
             row_layout = QHBoxLayout()
-            row_layout.setSpacing(10)
-            row_layout.setContentsMargins(10, 5, 10, 5)
+            row_layout.setSpacing(10) # расстояние в 10 пикселей между названием, полем и чекбоксом
+            row_layout.setContentsMargins(10, 5, 10, 5) # 10 пикселей слева и справа и по 5 пикселей сверху и снизу
 
             # Название услуги
             name_label = QLabel(name)
-            name_label.setFixedWidth(150)   # фиксированная ширина
+            name_label.setFixedWidth(105)   # Этой цифрой мы можем регулировать расположение полей ввода
+            name_label.setStyleSheet("padding-left: 10px;") #отступаем слева на расстояние 10 пикселей для более точной регулировки положения виджетов
             row_layout.addWidget(name_label)
+
 
             # Поле ввода или прочерк
             if service_type == "metered":
@@ -123,16 +125,23 @@ class MainWindow(QMainWindow):
                 entry.setFixedWidth(200)    # фиксированная ширина
                 row_layout.addWidget(entry)
                 self.entries[key] = entry
+                #row_layout.addSpacing(50)
             else:
-                label = QLabel("—")
+                label = QLabel("Показания счетчика не требуются")
                 label.setFixedWidth(200)
                 label.setAlignment(Qt.AlignCenter)
                 row_layout.addWidget(label)
+                #row_layout.addSpacing(50)
+
+            # Распорка перед чекбоксом
+            spacer= QWidget() # Создали пустой виджет для регулировки смещения чекбоксов
+            spacer.setFixedWidth(80) # Меняя цифру, мы регулируем смещение чекбоксов вправо или влево
+            row_layout.addWidget(spacer) # Добавляем этот виджет в окно
 
             # Чекбокс комиссии
-            cb = QCheckBox(f"{fee_percent}%")
-            cb.setFixedWidth(80)
-            row_layout.addWidget(cb)
+            cb = QCheckBox(f"{fee_percent}%") # Создаем виджет чекбокса в формате "(размер комиссии)%"
+            row_layout.addWidget(cb) #Добавляем виджет чекбокса в окно
+            self.checkboxes[key] = cb # Сохраняем объект чекбокса (cb) в словарь self.checkboxes под ключом, соответствующим идентификатору услуги (например, "gas", "electricity")
 
             # Добавляем растяжку, чтобы не растягивалось на всю ширину
             row_layout.addStretch()
