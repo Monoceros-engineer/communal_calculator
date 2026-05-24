@@ -3,7 +3,7 @@ import traceback
 try:
     from PySide6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-        QLabel, QLineEdit, QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QSizePolicy
+        QLabel, QLineEdit, QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, QMessageBox, QSizePolicy, QGridLayout
     )
     from PySide6.QtCore import Qt
     import config
@@ -21,7 +21,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Калькулятор коммуналки")
-        self.setGeometry(100, 100, 500, 500)
+        self.move(100, 100) #Данное окно появляется на экране с координатами 100 пикселей на 100 пикселей
         
         # Центральный виджет и основной вертикальный layout
         central = QWidget()
@@ -33,34 +33,13 @@ class MainWindow(QMainWindow):
         # Верхняя панель с датой и кнопкой настроек (пока заглушка)
         # Добавим позже
         
-        # Заголовки колонок (ресурс, показания, комиссия)
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(10, 10, 10, 10)   # отступы слева/справа/сверху/снизу
-        header_layout.setSpacing(150)                      # расстояние между элементами
-
-        res_label = QLabel("Ресурс")
-        res_label.setAlignment(Qt.AlignLeft) #установка выравнивания содержимого метки (QLabel) по левому краю.
-        header_layout.addWidget(res_label) #добавление виджета (метки с текстом) в горизонтальный контейнер (layout)
-
-        read_label = QLabel("Показания")
-        read_label.setAlignment(Qt.AlignLeft) # Устанавливаем выравнивание по левому краю
-        header_layout.addWidget(read_label)
-
-        comm_label = QLabel("Комиссия")
-        comm_label.setAlignment(Qt.AlignLeft) # Устанавливаем выравнивание по левому краю
-        header_layout.addWidget(comm_label)
-
-        header_layout.addStretch()  # прижимает все элементы влево
-        main_layout.addLayout(header_layout) #добавление одного (дочернего) layout (контейнера header_layout) в другой (родительский) layout main_layout
-        
         # Контейнер для динамических строк услуг
         self.services_container = QWidget() # создаем пустой виджет-контейнер self.services_container для строк услуг
-        self.services_container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding) # задаёт правила изменения размеров контейнера (self.services_container) при изменении размеров родительского окна (ширина фиксирована, а по высоте будет растягиваться)
-        self.services_container.setMaximumWidth(500) #ограничение максимальной ширины контейнера услуг в 500 пикселей
-        self.services_layout = QVBoxLayout(self.services_container) #создаёт вертикальный layout внутри self.services_container
-        self.services_layout.setContentsMargins(0, 0, 0, 0) # отступы слева/справа/сверху/снизу
+        self.grid_layout = QGridLayout(self.services_container) # создаем сетку
+        self.grid_layout.setContentsMargins(0, 0, 0, 0) # отступы слева/справа/сверху/снизу
+        self.grid_layout.setHorizontalSpacing(10)
         main_layout.addWidget(self.services_container)
-        
+      
         # Кнопка "Рассчитать"
         calc_button = QPushButton("Рассчитать")
         calc_button.setFixedWidth(200)
@@ -92,61 +71,64 @@ class MainWindow(QMainWindow):
         self.rebuild_services_ui()
         
     def rebuild_services_ui(self):
-        # Очищаем текущий layout
-        for i in reversed(range(self.services_layout.count())):
-            widget = self.services_layout.itemAt(i).widget()
-            if widget:
-                widget.deleteLater()
+        # Очищаем все строки сетки, кроме первой(с заголовками)
+        for i in reversed(range(self.grid_layout.count())):
+            self.grid_layout.itemAt(i).widget().deleteLater()
         self.entries.clear()
         self.checkboxes.clear()
+
+        # Заголовки (row 0)
+        header_name = QLabel("<b>Ресурс</b>")
+        header_name.setAlignment(Qt.AlignLeft | Qt.AlignVCenter) # Устанавливаем выравнивание по левому краю горизонтально и по центру вертикально
+        self.grid_layout.addWidget(header_name, 0, 0)
+        header_value = QLabel("<b>Показания</b>")
+        header_value.setAlignment(Qt.AlignCenter | Qt.AlignVCenter) # Устанавливаем выравнивание по центру горизонтально и вертикально
+        self.grid_layout.addWidget(header_value, 0, 1)
+        header_comm = QLabel("<b>Комиссия</b>")
+        header_comm.setAlignment(Qt.AlignCenter | Qt.AlignVCenter) # Устанавливаем выравнивание по центру горизонтально и вертикально
+        self.grid_layout.addWidget(header_comm, 0, 2)
         
+        row=1
         # Проходим по всем услугам из config
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
+            # Название услуги с тарифом
             name = service["name"]
-            service_type = service["type"]
-            fee_percent = int(service.get("fee", 0.0) * 100)
-            
-            row_layout = QHBoxLayout()
-            row_layout.setSpacing(10) # расстояние в 10 пикселей между названием, полем и чекбоксом
-            row_layout.setContentsMargins(10, 5, 10, 5) # 10 пикселей слева и справа и по 5 пикселей сверху и снизу
+            tariff = service.get("tariff", 0.0)
+            name_text = f"{name.upper()} (тариф {tariff: .2f})"
+            name_label = QLabel(name_text)
+            name_label.setWordWrap(True) # Перенос длинных слов
+            self.grid_layout.addWidget(name_label, row, 0) # Размещаем название услуги в сетке в первом столбце
+          
 
-            # Название услуги
-            name_label = QLabel(name)
-            name_label.setFixedWidth(105)   # Этой цифрой мы можем регулировать расположение полей ввода
-            name_label.setStyleSheet("padding-left: 10px;") #отступаем слева на расстояние 10 пикселей для более точной регулировки положения виджетов
-            row_layout.addWidget(name_label)
-
-
-            # Поле ввода или прочерк
-            if service_type == "metered":
+            # Поле ввода или метка для фиксированных услуг
+            if service["type"] == "metered":
                 entry = QLineEdit()
                 entry.setFixedWidth(200)    # фиксированная ширина
-                row_layout.addWidget(entry)
+                self.grid_layout.addWidget(entry, row, 1) # Размещаем окно ввода в сетке во втором столбце
                 self.entries[key] = entry
-                #row_layout.addSpacing(50)
             else:
                 label = QLabel("Показания счетчика не требуются")
                 label.setFixedWidth(200)
-                label.setAlignment(Qt.AlignCenter)
-                row_layout.addWidget(label)
-                #row_layout.addSpacing(50)
-
-            # Распорка перед чекбоксом
-            spacer= QWidget() # Создали пустой виджет для регулировки смещения чекбоксов
-            spacer.setFixedWidth(80) # Меняя цифру, мы регулируем смещение чекбоксов вправо или влево
-            row_layout.addWidget(spacer) # Добавляем этот виджет в окно
+                label.setAlignment(Qt.AlignCenter) # Выравниваем по центру
+                self.grid_layout.addWidget(label, row, 1) # Размещаем виджет в сетке во втором столбце
 
             # Чекбокс комиссии
+            fee_percent = int(service.get("fee", 0.0) * 100)
             cb = QCheckBox(f"{fee_percent}%") # Создаем виджет чекбокса в формате "(размер комиссии)%"
-            row_layout.addWidget(cb) #Добавляем виджет чекбокса в окно
+            self.grid_layout.addWidget(cb, row, 2, alignment=Qt.AlignCenter) # Размещаем чекбокс в сетке в третьем столбце и выравниваем по центру
             self.checkboxes[key] = cb # Сохраняем объект чекбокса (cb) в словарь self.checkboxes под ключом, соответствующим идентификатору услуги (например, "gas", "electricity")
 
-            # Добавляем растяжку, чтобы не растягивалось на всю ширину
-            row_layout.addStretch()
+            row += 1
 
-            self.services_layout.addLayout(row_layout)
+            # # Настраиваем растяжение колонок
+            self.grid_layout.setColumnStretch(0, 1)   # первая колонка растягивается
+            self.grid_layout.setColumnStretch(1, 0)   # вторая – фиксированной ширины
+            self.grid_layout.setColumnStretch(2, 0)   # третья – фиксированной ширины
+
+        self.adjustSize() # Размеры окна автоматически настраиваются под его содержание
+        self.setMinimumSize(500,400) # Задаем минимальные размеры окна
         
     def calculate(self):
         readings = {key: entry.text() for key, entry in self.entries.items()}
