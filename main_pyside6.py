@@ -18,10 +18,11 @@ try:
         QSizePolicy,
         QGridLayout,
         QDialog,
+        QTabWidget,
     )
     from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale
     import config
-    from communal_calculator import process_services_data, normalize_decimal
+    from communal_calculator import process_services_data, normalize_decimal, save_tariffs, save_fees, save_services
     from file_manager import save_readings_to_history, load_settings
     from config import services  # или import config, затем использовать config.services
 except Exception as e:
@@ -48,6 +49,11 @@ class MainWindow(QMainWindow):
             20, 20, 20, 20
         )  # отступы слева/справа/сверху/снизу
         main_layout.setSpacing(15)
+
+        # Кнопка настроек (в верхней панели, например, справа от даты)
+        self.settings_button = QPushButton("Настройки")
+        self.settings_button.clicked.connect(self.open_settings)
+        main_layout.addWidget(self.settings_button, alignment=Qt.AlignLeft)
                
         # Виджет для отображаения даты и времени
         # Виджет для отображения даты и времени
@@ -64,7 +70,7 @@ class MainWindow(QMainWindow):
         # Задаем шрифт, цвет фона метки через setStyleSheet
         self.datetime_label.setStyleSheet("background-color: #f0f0f0; padding: 5px; font-size: 12px;")
         main_layout.addWidget(self.datetime_label) # Добавляем метку с датой и временем в самый верх главного окна 
-
+      
         # Контейнер для динамических строк услуг
         self.services_container = (
             QWidget()
@@ -115,6 +121,12 @@ class MainWindow(QMainWindow):
             # Можно изменить под свой вкус
             datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
             self.datetime_label.setText(datetime_str)
+
+    def open_settings(self):
+        dialog = SettingsWindow(config.services, self)
+        if dialog.exec() == QDialog.Accepted:
+            # После сохранения обновить интерфейс
+            self.rebuild_services_ui()
 
     def rebuild_services_ui(self):
         # Очищаем все строки сетки, кроме первой(с заголовками)
@@ -354,6 +366,138 @@ class ResultWindow(QDialog):  # или QDialog
         )  # запас на итоги и кнопку
         self.setFixedHeight(total_height)
 
+
+class SettingsWindow(QDialog):
+    def __init__(self, services, parent=None):
+        super().__init__(parent)
+        self.services = services
+        self.setWindowTitle("Настройки")
+        self.setMinimumSize(600, 400)
+
+        # Основной layout
+        layout = QVBoxLayout(self)
+
+        # Создаём вкладки
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # Вкладка "Тарифы"
+        self.tariffs_tab = QWidget()
+        self.tab_widget.addTab(self.tariffs_tab, "Тарифы")
+        self.setup_tariffs_tab()
+
+        # Вкладка "Комиссии"
+        self.commissions_tab = QWidget()
+        self.tab_widget.addTab(self.commissions_tab, "Комиссии")
+        self.setup_commissions_tab()
+
+        # Вкладка "Управление услугами"
+        self.services_tab = QWidget()
+        self.tab_widget.addTab(self.services_tab, "Управление услугами")
+        self.setup_services_tab()
+
+        # Кнопки "Сохранить" и "Отмена"
+        button_box = QHBoxLayout()
+        save_btn = QPushButton("Сохранить")
+        save_btn.clicked.connect(self.save_all)
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.clicked.connect(self.reject)  # reject закрывает диалог
+        button_box.addWidget(save_btn)
+        button_box.addWidget(cancel_btn)
+        layout.addLayout(button_box)
+
+    def setup_tariffs_tab(self):
+        """Создаёт таблицу для редактирования тарифов."""
+        layout = QVBoxLayout(self.tariffs_tab)
+        # Таблица
+        self.tariffs_table = QTableWidget()
+        self.tariffs_table.setColumnCount(2)
+        self.tariffs_table.setHorizontalHeaderLabels(["Услуга", "Тариф (руб.)"])
+        layout.addWidget(self.tariffs_table)
+        # Заполняем данными из services
+        self.update_tariffs_table()
+
+    def update_tariffs_table(self):
+        """Обновляет таблицу тарифов на основе текущих services."""
+        services = self.services
+        self.tariffs_table.setRowCount(len(services))
+        for row, (key, service) in enumerate(services.items()):
+            # Название услуги (не редактируется)
+            name_item = QTableWidgetItem(service["name"])
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)  # запрещаем редактирование
+            self.tariffs_table.setItem(row, 0, name_item)
+            # Тариф (редактируемое поле)
+            tariff_item = QTableWidgetItem(str(service["tariff"]))
+            self.tariffs_table.setItem(row, 1, tariff_item)
+        self.tariffs_table.resizeColumnsToContents()
+
+    def setup_commissions_tab(self):
+        """Создаёт таблицу для редактирования комиссий."""
+        layout = QVBoxLayout(self.commissions_tab)
+        self.commissions_table = QTableWidget()
+        self.commissions_table.setColumnCount(2)
+        self.commissions_table.setHorizontalHeaderLabels(["Услуга", "Комиссия (%)"])
+        layout.addWidget(self.commissions_table)
+        self.update_commissions_table()
+
+    def update_commissions_table(self):
+        services = self.services
+        self.commissions_table.setRowCount(len(services))
+        for row, (key, service) in enumerate(services.items()):
+            name_item = QTableWidgetItem(service["name"])
+            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+            self.commissions_table.setItem(row, 0, name_item)
+            fee_percent = int(service.get("fee", 0.0) * 100)
+            fee_item = QTableWidgetItem(str(fee_percent))
+            self.commissions_table.setItem(row, 1, fee_item)
+        self.commissions_table.resizeColumnsToContents()
+
+    def setup_services_tab(self):
+        """Вкладка управления услугами (пока заглушка)."""
+        layout = QVBoxLayout(self.services_tab)
+        label = QLabel("Здесь будет управление услугами (добавление, удаление, включение/отключение).")
+        layout.addWidget(label)
+        # TODO: реализовать список услуг и кнопки
+
+    def save_all(self):
+        """Сохраняет изменения из всех вкладок."""
+        # Сохраняем тарифы
+        new_tariffs = {}
+        for row in range(self.tariffs_table.rowCount()):
+            key = list(self.services.keys())[row]
+            tariff_str = self.tariffs_table.item(row, 1).text()
+            tariff_str = normalize_decimal(tariff_str)  # замена запятой на точку
+            try:
+                new_tariffs[key] = float(tariff_str)
+            except ValueError:
+                QMessageBox.warning(self, "Ошибка", f"Некорректный тариф для услуги {self.services[key]['name']}")
+                return
+        save_tariffs(new_tariffs)
+
+        # Сохраняем комиссии
+        new_fees = {}
+        for row in range(self.commissions_table.rowCount()):
+            key = list(self.services.keys())[row]
+            fee_str = self.commissions_table.item(row, 1).text()
+            fee_str = normalize_decimal(fee_str)  # замена запятой на точку
+            try:
+                fee_percent = float(fee_str)
+                if fee_percent < 0 or fee_percent > 100:
+                    raise ValueError
+                new_fees[key] = fee_percent / 100.0
+            except ValueError:
+                QMessageBox.warning(self, "Ошибка", f"Комиссия должна быть числом от 0 до 100 для услуги {self.services[key]['name']}")
+                return
+        save_fees(new_fees)
+
+        self.accept()
+
+        # Сохраняем услуги (пока не трогаем)
+        # save_services() уже вызывается внутри save_tariffs и save_fees через save_settings()? Нет, они вызывают save_settings() отдельно. 
+        # Но после сохранения тарифов и комиссий services уже обновились в config.
+        # Можно дополнительно вызвать save_services() для сохранения структуры, но она уже вызывается внутри save_tariffs и save_fees.
+
+        self.accept()  # закрываем диалог
 
 if __name__ == "__main__":
     try:
