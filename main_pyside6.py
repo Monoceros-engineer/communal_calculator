@@ -19,7 +19,7 @@ try:
         QGridLayout,
         QDialog,
     )
-    from PySide6.QtCore import Qt, QTimer, QDateTime
+    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale
     import config
     from communal_calculator import process_services_data, normalize_decimal
     from file_manager import save_readings_to_history, load_settings
@@ -110,9 +110,10 @@ class MainWindow(QMainWindow):
 
     def update_datetime(self):
             now = QDateTime.currentDateTime()
+            locale = QLocale(QLocale.Russian)
             # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
             # Можно изменить под свой вкус
-            datetime_str = now.toString("dddd, d MMMM yyyy г. HH:mm:ss")
+            datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
             self.datetime_label.setText(datetime_str)
 
     def rebuild_services_ui(self):
