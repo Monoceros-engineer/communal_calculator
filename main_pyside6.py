@@ -1,4 +1,5 @@
 import sys
+import os
 import traceback
 
 try:
@@ -20,17 +21,122 @@ try:
         QDialog,
         QTabWidget,
     )
-    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale
+    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect
+    from PySide6.QtGui import QPixmap, QPainter
     import config
-    from communal_calculator import process_services_data, normalize_decimal, save_tariffs, save_fees, save_services
+    from communal_calculator import (
+        process_services_data,
+        normalize_decimal,
+        save_tariffs,
+        save_fees,
+        save_services,
+    )
     from file_manager import save_readings_to_history, load_settings
     from config import services  # или import config, затем использовать config.services
+    import random
 except Exception as e:
     print("Import error:", e)
     sys.exit(1)
 
 # Загружаем настройки из JSON (заполнит config.services)
 load_settings()
+
+def resource_path(relative_path):
+    """Получить абсолютный путь к ресурсу, работает для разработки и для PyInstaller."""
+    if getattr(sys, 'frozen', False):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+
+class AnimatedBackground(QWidget):
+    def __init__(self, parent=None, bg_path=None, effect_path=None, mode="clouds"):
+        super().__init__(parent)
+        self.background = QPixmap(bg_path) if bg_path else QPixmap()
+        self.effect = QPixmap(effect_path) if effect_path else QPixmap()
+        self.mode = mode  # clouds / leaves / snow
+        self.cloud_x = 0
+        self.cloud_speed = 0.2
+        self.particles = []
+        self.init_particles()
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_animation)
+        self.timer.start(30)  # 30 мс ~33 FPS
+
+    def set_season_effect(self, bg_path, effect_path, mode):
+        self.background = QPixmap(bg_path)
+        effect_pixmap = QPixmap(effect_path)
+        # Уменьшаем эффект в 2 раза (подберите коэффициент)
+        scale_factor = 0.5
+        new_width = int(effect_pixmap.width() * scale_factor)
+        new_height = int(effect_pixmap.height() * scale_factor)
+        self.effect = effect_pixmap.scaled(
+            new_width, new_height, Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+        self.mode = mode
+        self.init_particles()
+
+    def init_particles(self):
+        self.particles.clear()
+        for _ in range(40):
+            self.particles.append(
+                {
+                    "x": random.randint(0, 800),
+                    "y": random.randint(0, 600),
+                    "speed": random.uniform(0.5, 2),
+                    "drift": random.uniform(-0.5, 0.5),
+                    "size": random.uniform(0.3, 1.0),
+                }
+            )
+
+    def update_animation(self):
+        if self.mode == "clouds":
+            self.cloud_x += self.cloud_speed
+            if self.cloud_x > self.width():
+                self.cloud_x = -self.effect.width()
+        else:
+            for p in self.particles:
+                p["y"] += p["speed"]
+                p["x"] += p["drift"]
+                if p["y"] > self.height():
+                    p["y"] = -20
+                    p["x"] = random.randint(0, self.width())
+        self.update()
+
+    def paintEvent(self, event):
+        if self.background.isNull():
+            return
+        painter = QPainter(self)
+        painter.drawPixmap(self.rect(), self.background)
+
+        if self.mode == "clouds":
+            y = int(
+                self.height() * 0.0
+            )  # высота положения облаков 0.0 - это самый верх 0.15 - посередине окна
+            painter.drawPixmap(int(self.cloud_x), y, self.effect)
+            painter.drawPixmap(int(self.cloud_x - self.effect.width()), y, self.effect)
+        else:
+            for p in self.particles:
+                w = int(self.effect.width() * p["size"])
+                h = int(self.effect.height() * p["size"])
+                painter.drawPixmap(int(p["x"]), int(p["y"]), w, h, self.effect)
+
+
+def get_season_by_date():
+    import datetime
+
+    now = datetime.datetime.now()
+    month = now.month
+    if 3 <= month <= 5:
+        return "spring"
+    elif 6 <= month <= 8:
+        return "summer"
+    elif 9 <= month <= 11:
+        return "autumn"
+    else:
+        return "winter"
 
 
 class MainWindow(QMainWindow):
@@ -42,35 +148,106 @@ class MainWindow(QMainWindow):
         )  # Данное окно появляется на экране с координатами 100 пикселей на 100 пикселей
 
         # Центральный виджет и основной вертикальный layout
-        central = QWidget()
-        self.setCentralWidget(central)
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(
-            20, 20, 20, 20
-        )  # отступы слева/справа/сверху/снизу
-        main_layout.setSpacing(15)
+        # Создаём фон
+        season = get_season_by_date()
+        if season == "spring":
+            bg_path = "assets/backgrounds/spring.png"
+            effect_path = "assets/effects/clouds.png"
+            mode = "clouds"
+        elif season == "summer":
+            bg_path = "assets/backgrounds/summer.png"
+            effect_path = "assets/effects/clouds.png"
+            mode = "clouds"
+        elif season == "autumn":
+            bg_path = "assets/backgrounds/autumn.png"
+            effect_path = "assets/effects/leaves.png"
+            mode = "leaves"
+        elif season == "winter":
+            bg_path = "assets/backgrounds/winter.png"
+            effect_path = "assets/effects/snow.png"
+            mode = "snow"
+        else:
+            bg_path = "assets/backgrounds/spring.png"
+            effect_path = "assets/effects/clouds.png"
+            mode = "clouds"
+        self.animated_bg = AnimatedBackground(self, bg_path, effect_path, mode=mode)
+        self.setCentralWidget(self.animated_bg)
 
-        # Кнопка настроек (в верхней панели, например, справа от даты)
+        # Создаём полупрозрачную панель
+        self.panel = QWidget(self.animated_bg)
+        self.panel.setStyleSheet("""
+            background: rgba(255, 255, 255, 220);
+            border-radius: 15px;
+            border: 1px solid rgba(200, 200, 200, 100);
+        """)
+
+        # Layout для панели (вертикальный)
+        panel_layout = QVBoxLayout(self.panel)
+        panel_layout.setContentsMargins(20, 20, 20, 20)
+        panel_layout.setSpacing(15)
+
+        # Центрируем панель на фоне
+        bg_layout = QVBoxLayout(self.animated_bg)
+        bg_layout.addStretch()
+        bg_layout.addWidget(self.panel)
+        bg_layout.setContentsMargins(50, 50, 50, 50)   # отступы со всех сторон по 50 пикселей
+        bg_layout.addStretch()
+
+        # Кнопки
         self.settings_button = QPushButton("Настройки")
         self.settings_button.clicked.connect(self.open_settings)
-        main_layout.addWidget(self.settings_button, alignment=Qt.AlignLeft)
-               
-        # Виджет для отображаения даты и времени
+
+        self.help_button = QPushButton("Помощь")
+        self.help_button.clicked.connect(self.open_help)
+
+        # Стиль для обеих кнопок
+        button_style = """
+            QPushButton {
+                background-color: #e0e0e0;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a0a0a0;
+            }
+        """
+        self.settings_button.setStyleSheet(button_style)
+        self.help_button.setStyleSheet(button_style)
+
+        # Горизонтальная упаковка кнопок
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.settings_button)
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(self.help_button)
+
+        # Добавляем в панель (panel_layout)
+        panel_layout.addLayout(buttons_layout)
+
         # Виджет для отображения даты и времени
         self.datetime_label = QLabel()
         self.datetime_label.setAlignment(Qt.AlignCenter)  # выравнивание по центру
-        self.datetime_label.setStyleSheet("font-size: 12px; margin: 5px;")  # небольшой отступ
-        
+        self.datetime_label.setStyleSheet(
+            "font-size: 12px; margin: 5px;"
+        )  # небольшой отступ
+
         # Таймер для обновления времени
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_datetime)
         self.timer.start(1000)  # каждую секунду
-        self.update_datetime()   # сразу установить текущее значение
+        self.update_datetime()  # сразу установить текущее значение
 
         # Задаем шрифт, цвет фона метки через setStyleSheet
-        self.datetime_label.setStyleSheet("background-color: #f0f0f0; padding: 5px; font-size: 12px;")
-        main_layout.addWidget(self.datetime_label) # Добавляем метку с датой и временем в самый верх главного окна 
-      
+        self.datetime_label.setStyleSheet(
+            "background-color: #f0f0f0; padding: 5px; font-size: 12px;"
+        )
+        panel_layout.addWidget(
+            self.datetime_label
+        )  # Добавляем метку с датой и временем в самый верх главного окна
+
         # Контейнер для динамических строк услуг
         self.services_container = (
             QWidget()
@@ -80,7 +257,10 @@ class MainWindow(QMainWindow):
             0, 0, 0, 0
         )  # отступы слева/справа/сверху/снизу
         self.grid_layout.setHorizontalSpacing(10)
-        main_layout.addWidget(self.services_container)
+        self.grid_layout.setColumnStretch(0, 1)   # первая колонка будет растягиваться
+        self.grid_layout.setColumnStretch(1, 0)   # вторая – фиксированной ширины
+        self.grid_layout.setColumnStretch(2, 0)   # третья – фиксированной
+        panel_layout.addWidget(self.services_container)
 
         # Кнопка "Рассчитать"
         calc_button = QPushButton("Рассчитать")
@@ -102,7 +282,7 @@ class MainWindow(QMainWindow):
             }
         """)
         calc_button.clicked.connect(self.calculate)
-        main_layout.addWidget(
+        panel_layout.addWidget(
             calc_button, alignment=Qt.AlignCenter
         )  # Устанавливаем выравнивание по центру
         calc_button.setObjectName("calculateButton")  # даём уникальное имя
@@ -114,19 +294,67 @@ class MainWindow(QMainWindow):
         # Построение интерфейса услуг
         self.rebuild_services_ui()
 
+        season = get_season_by_date()
+        if season == "spring":
+            self.animated_bg.set_season_effect(
+                "assets/backgrounds/spring.png", "assets/effects/clouds.png", "clouds"
+            )
+        elif season == "summer":
+            self.animated_bg.set_season_effect(
+                "assets/backgrounds/summer.png", "assets/effects/clouds.png", "clouds"
+            )
+        elif season == "autumn":
+            self.animated_bg.set_season_effect(
+                "assets/backgrounds/autumn.png", "assets/effects/leaves.png", "leaves"
+            )
+        elif season == "winter":
+            self.animated_bg.set_season_effect(
+                "assets/backgrounds/winter.png", "assets/effects/snow.png", "snow"
+            )
+
     def update_datetime(self):
-            now = QDateTime.currentDateTime()
-            locale = QLocale(QLocale.Russian)
-            # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
-            # Можно изменить под свой вкус
-            datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
-            self.datetime_label.setText(datetime_str)
+        now = QDateTime.currentDateTime()
+        locale = QLocale(QLocale.Russian)
+        # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
+        # Можно изменить под свой вкус
+        datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
+        self.datetime_label.setText(datetime_str)
 
     def open_settings(self):
         dialog = SettingsWindow(config.services, self)
         if dialog.exec() == QDialog.Accepted:
             # После сохранения обновить интерфейс
             self.rebuild_services_ui()
+
+    def open_help(self):
+        import webbrowser
+        import tempfile
+        import os
+        from PySide6.QtWidgets import QMessageBox
+
+        readme_path = resource_path("README.md")
+        if not os.path.exists(readme_path):
+            QMessageBox.warning(self, "Ошибка", "Файл справки (README.md) не найден.")
+            return
+
+        try:
+            with open(readme_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось прочитать README.md: {e}")
+            return
+
+        html_content = f"""<!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>Справка - Калькулятор коммуналки</title></head>
+    <body><pre style="font-family: Arial, sans-serif;">{content}</pre></body>
+    </html>"""
+
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
+            f.write(html_content)
+            temp_html = f.name
+
+        webbrowser.open(temp_html)
 
     def rebuild_services_ui(self):
         # Очищаем все строки сетки, кроме первой(с заголовками)
@@ -424,7 +652,9 @@ class SettingsWindow(QDialog):
         for row, (key, service) in enumerate(services.items()):
             # Название услуги (не редактируется)
             name_item = QTableWidgetItem(service["name"])
-            name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)  # запрещаем редактирование
+            name_item.setFlags(
+                name_item.flags() & ~Qt.ItemIsEditable
+            )  # запрещаем редактирование
             self.tariffs_table.setItem(row, 0, name_item)
             # Тариф (редактируемое поле)
             tariff_item = QTableWidgetItem(str(service["tariff"]))
@@ -455,7 +685,9 @@ class SettingsWindow(QDialog):
     def setup_services_tab(self):
         """Вкладка управления услугами (пока заглушка)."""
         layout = QVBoxLayout(self.services_tab)
-        label = QLabel("Здесь будет управление услугами (добавление, удаление, включение/отключение).")
+        label = QLabel(
+            "Здесь будет управление услугами (добавление, удаление, включение/отключение)."
+        )
         layout.addWidget(label)
         # TODO: реализовать список услуг и кнопки
 
@@ -470,7 +702,11 @@ class SettingsWindow(QDialog):
             try:
                 new_tariffs[key] = float(tariff_str)
             except ValueError:
-                QMessageBox.warning(self, "Ошибка", f"Некорректный тариф для услуги {self.services[key]['name']}")
+                QMessageBox.warning(
+                    self,
+                    "Ошибка",
+                    f"Некорректный тариф для услуги {self.services[key]['name']}",
+                )
                 return
         save_tariffs(new_tariffs)
 
@@ -486,18 +722,23 @@ class SettingsWindow(QDialog):
                     raise ValueError
                 new_fees[key] = fee_percent / 100.0
             except ValueError:
-                QMessageBox.warning(self, "Ошибка", f"Комиссия должна быть числом от 0 до 100 для услуги {self.services[key]['name']}")
+                QMessageBox.warning(
+                    self,
+                    "Ошибка",
+                    f"Комиссия должна быть числом от 0 до 100 для услуги {self.services[key]['name']}",
+                )
                 return
         save_fees(new_fees)
 
         self.accept()
 
         # Сохраняем услуги (пока не трогаем)
-        # save_services() уже вызывается внутри save_tariffs и save_fees через save_settings()? Нет, они вызывают save_settings() отдельно. 
+        # save_services() уже вызывается внутри save_tariffs и save_fees через save_settings()? Нет, они вызывают save_settings() отдельно.
         # Но после сохранения тарифов и комиссий services уже обновились в config.
         # Можно дополнительно вызвать save_services() для сохранения структуры, но она уже вызывается внутри save_tariffs и save_fees.
 
         self.accept()  # закрываем диалог
+
 
 if __name__ == "__main__":
     try:
