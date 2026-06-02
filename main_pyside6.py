@@ -20,6 +20,7 @@ try:
         QGridLayout,
         QDialog,
         QTabWidget,
+        QHeaderView,
     )
     from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect
     from PySide6.QtGui import QPixmap, QPainter
@@ -51,23 +52,28 @@ def resource_path(relative_path):
 
 
 class AnimatedBackground(QWidget):
-    def __init__(self, parent=None, bg_path=None, effect_path=None, mode="clouds"):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.background = QPixmap(bg_path) if bg_path else QPixmap()
-        self.effect = QPixmap(effect_path) if effect_path else QPixmap()
-        self.mode = mode  # clouds / leaves / snow
+        self.background = QPixmap()
+        self.effect = QPixmap()
+        self.mode = None
         self.cloud_x = 0
         self.cloud_speed = 0.2
         self.particles = []
         self.init_particles()
-
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_animation)
         self.timer.start(30)  # 30 мс ~33 FPS
 
     def set_season_effect(self, bg_path, effect_path, mode):
+        print(f"DEBUG set_season_effect: mode={mode}, effect_path={effect_path}")
+        import os
+        if not os.path.exists(effect_path):
+            print(f"WARNING: file not found: {effect_path}")
         self.background = QPixmap(bg_path)
         effect_pixmap = QPixmap(effect_path)
+        if effect_pixmap.isNull():
+            print(f"ERROR: failed to load pixmap: {effect_path}")
         # Уменьшаем эффект в 2 раза (подберите коэффициент)
         scale_factor = 0.5
         new_width = int(effect_pixmap.width() * scale_factor)
@@ -92,7 +98,7 @@ class AnimatedBackground(QWidget):
             )
 
     def update_animation(self):
-        if self.mode == "clouds":
+        if self.mode in ("clouds", "clouds_summer"):
             self.cloud_x += self.cloud_speed
             if self.cloud_x > self.width():
                 self.cloud_x = -self.effect.width()
@@ -111,7 +117,7 @@ class AnimatedBackground(QWidget):
         painter = QPainter(self)
         painter.drawPixmap(self.rect(), self.background)
 
-        if self.mode == "clouds":
+        if self.mode in ("clouds", "clouds_summer"):
             y = int(
                 self.height() * 0.0
             )  # высота положения облаков 0.0 - это самый верх 0.15 - посередине окна
@@ -122,7 +128,6 @@ class AnimatedBackground(QWidget):
                 w = int(self.effect.width() * p["size"])
                 h = int(self.effect.height() * p["size"])
                 painter.drawPixmap(int(p["x"]), int(p["y"]), w, h, self.effect)
-
 
 def get_season_by_date():
     import datetime
@@ -156,8 +161,8 @@ class MainWindow(QMainWindow):
             mode = "clouds"
         elif season == "summer":
             bg_path = "assets/backgrounds/summer.png"
-            effect_path = "assets/effects/clouds.png"
-            mode = "clouds"
+            effect_path = "assets/effects/clouds_summer.png"
+            mode = "clouds_summer"
         elif season == "autumn":
             bg_path = "assets/backgrounds/autumn.png"
             effect_path = "assets/effects/leaves.png"
@@ -170,8 +175,14 @@ class MainWindow(QMainWindow):
             bg_path = "assets/backgrounds/spring.png"
             effect_path = "assets/effects/clouds.png"
             mode = "clouds"
-        self.animated_bg = AnimatedBackground(self, bg_path, effect_path, mode=mode)
+        self.animated_bg = AnimatedBackground(self)
         self.setCentralWidget(self.animated_bg)
+        self.animated_bg.set_season_effect(bg_path, effect_path, mode)
+
+        print(f"Season detected: {season}")
+        print(f"bg_path = {bg_path}")
+        print(f"effect_path = {effect_path}")
+        print(f"mode = {mode}")
 
         # Создаём полупрозрачную панель
         self.panel = QWidget(self.animated_bg)
@@ -293,25 +304,7 @@ class MainWindow(QMainWindow):
 
         # Построение интерфейса услуг
         self.rebuild_services_ui()
-
-        season = get_season_by_date()
-        if season == "spring":
-            self.animated_bg.set_season_effect(
-                "assets/backgrounds/spring.png", "assets/effects/clouds.png", "clouds"
-            )
-        elif season == "summer":
-            self.animated_bg.set_season_effect(
-                "assets/backgrounds/summer.png", "assets/effects/clouds.png", "clouds"
-            )
-        elif season == "autumn":
-            self.animated_bg.set_season_effect(
-                "assets/backgrounds/autumn.png", "assets/effects/leaves.png", "leaves"
-            )
-        elif season == "winter":
-            self.animated_bg.set_season_effect(
-                "assets/backgrounds/winter.png", "assets/effects/snow.png", "snow"
-            )
-
+       
     def update_datetime(self):
         now = QDateTime.currentDateTime()
         locale = QLocale(QLocale.Russian)
@@ -600,10 +593,12 @@ class SettingsWindow(QDialog):
         super().__init__(parent)
         self.services = services
         self.setWindowTitle("Настройки")
-        self.setMinimumSize(600, 400)
+        #self.setMinimumSize(600, 400)
 
         # Основной layout
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
 
         # Создаём вкладки
         self.tab_widget = QTabWidget()
@@ -634,13 +629,19 @@ class SettingsWindow(QDialog):
         button_box.addWidget(cancel_btn)
         layout.addLayout(button_box)
 
+        # После создания всех виджетов подгоняем размер окна
+        self.adjustSize()
+        self.setMinimumSize(500, 400)  # чтобы окно не было слишком маленьким
+        
     def setup_tariffs_tab(self):
         """Создаёт таблицу для редактирования тарифов."""
         layout = QVBoxLayout(self.tariffs_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
         # Таблица
         self.tariffs_table = QTableWidget()
         self.tariffs_table.setColumnCount(2)
         self.tariffs_table.setHorizontalHeaderLabels(["Услуга", "Тариф (руб.)"])
+        self.tariffs_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.tariffs_table)
         # Заполняем данными из services
         self.update_tariffs_table()
@@ -659,14 +660,20 @@ class SettingsWindow(QDialog):
             # Тариф (редактируемое поле)
             tariff_item = QTableWidgetItem(str(service["tariff"]))
             self.tariffs_table.setItem(row, 1, tariff_item)
-        self.tariffs_table.resizeColumnsToContents()
+        #self.tariffs_table.resizeColumnsToContents()
+        # Растягиваем колонку с названием (0) на всё доступное пространство
+        self.tariffs_table.horizontalHeader().setStretchLastSection(False)
+        self.tariffs_table.setColumnWidth(1, 120)  # фиксированная ширина для тарифа
+        self.tariffs_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
 
     def setup_commissions_tab(self):
         """Создаёт таблицу для редактирования комиссий."""
         layout = QVBoxLayout(self.commissions_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
         self.commissions_table = QTableWidget()
         self.commissions_table.setColumnCount(2)
         self.commissions_table.setHorizontalHeaderLabels(["Услуга", "Комиссия (%)"])
+        self.commissions_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.commissions_table)
         self.update_commissions_table()
 
@@ -680,7 +687,11 @@ class SettingsWindow(QDialog):
             fee_percent = int(service.get("fee", 0.0) * 100)
             fee_item = QTableWidgetItem(str(fee_percent))
             self.commissions_table.setItem(row, 1, fee_item)
-        self.commissions_table.resizeColumnsToContents()
+        #self.commissions_table.resizeColumnsToContents()
+        # Растягиваем колонку с названием (0) на всё доступное пространство
+        self.commissions_table.horizontalHeader().setStretchLastSection(False)
+        self.commissions_table.setColumnWidth(1, 100)
+        self.commissions_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
 
     def setup_services_tab(self):
         """Вкладка управления услугами (пока заглушка)."""
