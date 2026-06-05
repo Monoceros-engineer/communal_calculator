@@ -140,47 +140,198 @@ def get_season_by_date():
     else:
         return "winter"
 
+class WelcomeWindow(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Добро пожаловать!")
+        self.setFixedSize(500, 400)
+        self.setWindowFlags(Qt.FramelessWindowHint)  # убираем рамку (опционально)
+        self.setModal(True)
+
+        # Определяем сезон для фона
+        season = get_season_by_date()
+        if season == "spring":
+            bg_path = "assets/backgrounds/spring.png"
+            effect_path = "assets/effects/clouds.png"
+            mode = "clouds"
+        elif season == "summer":
+            bg_path = "assets/backgrounds/summer.png"
+            effect_path = "assets/effects/clouds_summer.png"
+            mode = "clouds_summer"
+        elif season == "autumn":
+            bg_path = "assets/backgrounds/autumn.png"
+            effect_path = "assets/effects/leaves.png"
+            mode = "leaves"
+        else:  # winter
+            bg_path = "assets/backgrounds/winter.png"
+            effect_path = "assets/effects/snow.png"
+            mode = "snow"
+
+        # Создаём анимированный фон
+        self.animated_bg = AnimatedBackground(self)
+        self.animated_bg.set_season_effect(bg_path, effect_path, mode)
+        self.animated_bg.setGeometry(0, 0, 600, 400)
+
+        # Заголовок (надпись)
+        self.title_label = QLabel("<h1>Добро пожаловать в Калькулятор коммуналки!</h1>", self)
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                background: rgba(0, 0, 0, 150);
+                border-radius: 10px;
+                padding: 10px; 
+                font-weight: bold;
+                font-size: 10px;
+            }
+        """)
+        self.title_label.adjustSize()
+        self.title_label.move((self.width() - self.title_label.width()) // 2, 50)
+
+        # Кнопка "Начать"
+        self.start_button = QPushButton("Начать", self)
+        self.start_button.setFixedSize(200, 50)
+        self.start_button.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 10px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:pressed {
+                background-color: #3d8b40;
+            }
+        """)
+        # Размещаем кнопку по центру
+        self.start_button.move((self.width() - self.start_button.width()) // 2,
+                               (self.height() - self.start_button.height()) // 2)
+        self.start_button.clicked.connect(self.on_start)
+
+    def on_start(self):
+        self.accept()  # закрываем окно с кодом Accepted
+
+    def resizeEvent(self, event):
+        # При изменении размера (хотя у нас фиксированный размер) перецентрируем кнопку
+        self.start_button.move((self.width() - self.start_button.width()) // 2,
+                               (self.height() - self.start_button.height()) // 2)
+        super().resizeEvent(event)
 
 class FirstRunWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Добро пожаловать!")
+        self.setWindowTitle("Настройка услуг")
         self.setModal(True)
-        self.setMinimumSize(500, 400)
+        self.setMinimumSize(600, 500)
 
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
+        # Определяем сезон для фона
+        season = get_season_by_date()
+        if season == "spring":
+            bg_path = "assets/backgrounds/spring.png"
+            effect_path = "assets/effects/clouds.png"
+            mode = "clouds"
+        elif season == "summer":
+            bg_path = "assets/backgrounds/summer.png"
+            effect_path = "assets/effects/clouds_summer.png"
+            mode = "clouds_summer"
+        elif season == "autumn":
+            bg_path = "assets/backgrounds/autumn.png"
+            effect_path = "assets/effects/leaves.png"
+            mode = "leaves"
+        else:  # winter
+            bg_path = "assets/backgrounds/winter.png"
+            effect_path = "assets/effects/snow.png"
+            mode = "snow"
+
+        # Создаём анимированный фон
+        self.animated_bg = AnimatedBackground(self)
+        self.animated_bg.set_season_effect(bg_path, effect_path, mode)
+
+        # Основной layout диалога (только для фона)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(self.animated_bg)   # фон занимает всю область
+        
+        # Полупрозрачная панель для контента
+        self.panel = QWidget(self.animated_bg)
+        self.panel.setStyleSheet("""
+            background: rgba(255, 255, 255, 220);
+            border-radius: 15px;
+            border: 1px solid rgba(200, 200, 200, 100);
+        """)
+        self.panel.setMinimumWidth(400)
+
+        # Layout панели
+        panel_layout = QVBoxLayout(self.panel)
+        panel_layout.setContentsMargins(20, 20, 20, 20)
+        panel_layout.setSpacing(15)
 
         # Приветственный текст
         label = QLabel(
             "<h2>Добро пожаловать в Калькулятор коммуналки!</h2>"
-            "<p>Для начала работы добавьте хотя бы одну услугу.</p>"
-            "<p>Вы сможете добавить услуги по счётчику (газ, свет, вода) "
-            "или фиксированные платежи (интернет, мусор).</p>"
+            "<p>Давайте начнем с настройки программы. Для того, чтобы все работало,</p>"
+            "<p>необходимо сделать несколько простых шагов:</p>"
+            "<p>1. Нажмите кнопку 'Добавить', чтобы создать услугу, расход по которой вы будете считать\n"
+    " (газ, свет, вода и т.д.).</p>"
+    "<p>2. Выберите тип услуги: 'По счётчику' или 'Фиксированная'.</p>"
+    "<p>3. Заполните название, тариф, комиссию (если есть). Для услуг по счётчику также укажите начальные показания (то есть те показания счетчика, которые вы передавали при прошлой оплате услуги).</p>"
+    "<p>4. После добавления всех услуг закройте окно управления.</p>"
+    "<p>5. В главном окне вводите текущие показания и нажимайте 'Рассчитать'.</p>"
+    "<p>Совет: Наводите курсор на кнопки — появятся подсказки.</p>"
         )
         label.setWordWrap(True)
-        layout.addWidget(label)
+        panel_layout.addWidget(label)
 
         # Список добавленных услуг
-        layout.addWidget(QLabel("Добавленные услуги:"))
+        panel_layout.addWidget(QLabel("Добавленные услуги:"))
         self.services_list = QListWidget()
-        layout.addWidget(self.services_list)
+        panel_layout.addWidget(self.services_list)
 
         # Кнопки
         btn_layout = QHBoxLayout()
-        self.btn_add = QPushButton("➕ Добавить услугу")
+        self.btn_add = QPushButton("Добавить услугу")
         self.btn_finish = QPushButton("✅ Готово")
         self.btn_finish.setEnabled(False)
         btn_layout.addWidget(self.btn_add)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_finish)
-        layout.addLayout(btn_layout)
+        panel_layout.addLayout(btn_layout)
+
+        button_style = """
+            QPushButton {
+                background-color: #e0e0e0;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a0a0a0;
+            }
+        """
+
+        self.btn_add.setStyleSheet(button_style)
+        self.btn_finish.setStyleSheet(button_style)
 
         self.btn_add.clicked.connect(self.add_service)
         self.btn_finish.clicked.connect(self.accept)
 
         # Обновляем список
         self.update_services_list()
+
+        # Размещаем панель по центру фона
+        bg_layout = QVBoxLayout(self.animated_bg)
+        bg_layout.addStretch()
+        bg_layout.addWidget(self.panel, alignment=Qt.AlignCenter)
+        bg_layout.addStretch()
+        bg_layout.setContentsMargins(50, 50, 50, 50)
+
 
     def update_services_list(self):
         self.services_list.clear()
@@ -1189,10 +1340,13 @@ if __name__ == "__main__":
     """)
 
     # Проверяем, есть ли услуги
-    from file_manager import load_settings
     load_settings()
     if not config.services:
-        # Первый запуск: показываем мастер
+        # Показываем приветственное окно с анимированным фоном
+        welcome = WelcomeWindow()
+        if welcome.exec() != QDialog.Accepted:
+            sys.exit(0)  # пользователь закрыл окно, выходим
+        # Теперь показываем мастер добавления услуг
         wizard = FirstRunWizard()
         if wizard.exec() != QDialog.Accepted:
             sys.exit(0)
