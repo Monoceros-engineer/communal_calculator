@@ -318,6 +318,9 @@ class FirstRunWizard(QDialog):
 
         self.btn_add.setStyleSheet(button_style)
         self.btn_finish.setStyleSheet(button_style)
+        
+        self.btn_add.setToolTip("Нажмите, чтобы добавить новую услугу (газ, свет, вода, интернет и т.д.).")
+        self.btn_finish.setToolTip("Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню 'Настройки').")
 
         self.btn_add.clicked.connect(self.add_service)
         self.btn_finish.clicked.connect(self.accept)
@@ -831,33 +834,50 @@ class AddServiceDialog(QDialog):
         # Название услуги
         layout.addWidget(QLabel("Название услуги:"))
         self.name_edit = QLineEdit()
+        self.name_edit.setToolTip("Введите название услуги, которую вы хотите добавить (например, 'Газ', 'Электричество').")
         layout.addWidget(self.name_edit)
 
         # Тип услуги
         layout.addWidget(QLabel("Тип:"))
         self.type_combo = QComboBox()
         self.type_combo.addItems(["По счётчику", "Фиксированная"])
+        self.type_combo.setToolTip(
+            "Выберите тип услуги:\n"
+            "- По счётчику: если вы снимаете показания счётчика для расчёта (газ, свет, вода).\n"
+            "- Фиксированная: если платёж не зависит от потребления (интернет, мусор, капремонт)."
+        )
         layout.addWidget(self.type_combo)
 
         # Начальное значение (для по счётчику)
         self.start_label = QLabel("Начальное значение:")
         self.start_edit = QLineEdit()
+        self.start_edit.setToolTip(
+            "Введите показания счётчика, которые были у вас в прошлом месяце.\n"
+            "Для новой услуги – начальное значение обычно равно 0."
+        )
         layout.addWidget(self.start_label)
         layout.addWidget(self.start_edit)
 
         # Тариф
         layout.addWidget(QLabel("Тариф (руб.):"))
         self.tariff_edit = QLineEdit()
+        self.tariff_edit.setToolTip(
+            "Введите стоимость за единицу потребления услуги (например, за 1 кВт·ч электроэнергии)."
+        )
         layout.addWidget(self.tariff_edit)
 
         # Комиссия (%)
         layout.addWidget(QLabel("Комиссия (%):"))
         self.fee_edit = QLineEdit()
+        self.fee_edit.setToolTip(
+            "Укажите комиссию банка в процентах (0 – если комиссия не взимается)."
+        )
         layout.addWidget(self.fee_edit)
 
         # Включена ли
         self.enabled_check = QCheckBox("Включена")
         self.enabled_check.setChecked(True)
+        self.enabled_check.setToolTip("Если галочка снята, услуга не будет отображаться в главном окне и не будет учитываться в расчётах.")
         layout.addWidget(self.enabled_check)
 
         # Кнопки
@@ -1066,6 +1086,8 @@ class SettingsWindow(QDialog):
         cancel_btn = button_box.addButton("Отмена", QDialogButtonBox.RejectRole)
         save_btn.clicked.connect(self.save_all)
         cancel_btn.clicked.connect(self.reject)
+        save_btn.setToolTip("Сохранить все изменения и закрыть окно настроек.")
+        cancel_btn.setToolTip("Отменить изменения и закрыть окно.")
         layout.addWidget(button_box)
 
         # Заполнение таблиц (они будут обновляться в setup_*)
