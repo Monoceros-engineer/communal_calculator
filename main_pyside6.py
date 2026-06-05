@@ -468,6 +468,17 @@ class MainWindow(QMainWindow):
             self.grid_layout.setColumnStretch(1, 0)  # вторая – фиксированной ширины
             self.grid_layout.setColumnStretch(2, 0)  # третья – фиксированной ширины
 
+        # Показать подсказку с начальными показаниями (если есть услуги)
+        if config.services:
+            msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
+            for key, service in config.services.items():
+                if service.get("type") == "metered" and service.get("enabled"):
+                    start_val = service.get("start_value", 0)
+                    msg_lines.append(f"{service['name']}: {start_val}")
+            if len(msg_lines) > 1:  # есть хотя бы одна услуга по счётчику
+                msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
+                QMessageBox.information(self, "Информация", msg)
+        
         self.adjustSize()  # Размеры окна автоматически настраиваются под его содержание
         self.setMinimumSize(500, 400)  # Задаем минимальные размеры окна
 
