@@ -23,6 +23,7 @@ try:
         QHeaderView,
         QComboBox,
         QDialogButtonBox,
+        QListWidget,
     )
     from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect
     from PySide6.QtGui import QPixmap, QPainter
@@ -140,6 +141,59 @@ def get_season_by_date():
         return "winter"
 
 
+class FirstRunWizard(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Добро пожаловать!")
+        self.setModal(True)
+        self.setMinimumSize(500, 400)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+
+        # Приветственный текст
+        label = QLabel(
+            "<h2>Добро пожаловать в Калькулятор коммуналки!</h2>"
+            "<p>Для начала работы добавьте хотя бы одну услугу.</p>"
+            "<p>Вы сможете добавить услуги по счётчику (газ, свет, вода) "
+            "или фиксированные платежи (интернет, мусор).</p>"
+        )
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        # Список добавленных услуг
+        layout.addWidget(QLabel("Добавленные услуги:"))
+        self.services_list = QListWidget()
+        layout.addWidget(self.services_list)
+
+        # Кнопки
+        btn_layout = QHBoxLayout()
+        self.btn_add = QPushButton("➕ Добавить услугу")
+        self.btn_finish = QPushButton("✅ Готово")
+        self.btn_finish.setEnabled(False)
+        btn_layout.addWidget(self.btn_add)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.btn_finish)
+        layout.addLayout(btn_layout)
+
+        self.btn_add.clicked.connect(self.add_service)
+        self.btn_finish.clicked.connect(self.accept)
+
+        # Обновляем список
+        self.update_services_list()
+
+    def update_services_list(self):
+        self.services_list.clear()
+        for key, service in config.services.items():
+            self.services_list.addItem(f"{service['name']} ({service['type']})")
+        self.btn_finish.setEnabled(len(config.services) > 0)
+
+    def add_service(self):
+        dialog = AddServiceDialog(config.services, self)
+        if dialog.exec():
+            self.update_services_list()
+            save_services()
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -147,6 +201,7 @@ class MainWindow(QMainWindow):
         self.move(
             100, 100
         )  # Данное окно появляется на экране с координатами 100 пикселей на 100 пикселей
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         # Центральный виджет и основной вертикальный layout
         # Создаём фон
@@ -479,6 +534,7 @@ class ResultWindow(QDialog):  # или QDialog
         self.total_amount = total_amount
         self.total_fee = total_fee
         self.total_sum_with_fee = total_sum_with_fee
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         layout = QVBoxLayout(self)
 
@@ -791,6 +847,7 @@ class SettingsWindow(QDialog):
         self.services = services
         self.refresh_callback = refresh_callback  # для обновления главного окна
         self.setWindowTitle("Настройки")
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
         
         # Основной layout
         layout = QVBoxLayout(self)
@@ -1069,30 +1126,43 @@ class SettingsWindow(QDialog):
 
 
 if __name__ == "__main__":
-    try:
-        app = QApplication(sys.argv)
-        app.setStyleSheet("""
-            QMainWindow { background-color: #f0f0f0; }
-            QLabel { font-size: 12px; }
-            QLineEdit { padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
-            QCheckBox { font-size: 12px; }
-            QPushButton {
-                padding: 6px;
-                border-radius: 4px;
-                background-color: #e0e0e0;
-                border: 1px solid #aaa;
-            }
-            QPushButton:hover {
-                background-color: #c0c0c0;   /* светлее при наведении */
-                border-color: #777;
-            }
-            QPushButton:pressed {
-                background-color: #a0a0a0;   /* темнее при нажатии */
-            }
-        """)
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec())
-    except Exception as e:
-        traceback.print_exc()
-        input("Press Enter to exit...")
+    app = QApplication(sys.argv)
+
+    # Устанавливаем иконку приложения (глобально)
+    from PySide6.QtGui import QIcon
+    app.setWindowIcon(QIcon(resource_path("icon.ico")))
+
+    # Загружаем стили (как у вас было)
+    app.setStyleSheet("""
+        QMainWindow { background-color: #f0f0f0; }
+        QLabel { font-size: 12px; }
+        QLineEdit { padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
+        QCheckBox { font-size: 12px; }
+        QPushButton {
+            padding: 6px;
+            border-radius: 4px;
+            background-color: #e0e0e0;
+            border: 1px solid #aaa;
+        }
+        QPushButton:hover {
+            background-color: #c0c0c0;
+        }
+        QPushButton:pressed {
+            background-color: #a0a0a0;
+        }
+    """)
+
+    # Проверяем, есть ли услуги
+    from file_manager import load_settings
+    load_settings()
+    if not config.services:
+        # Первый запуск: показываем мастер
+        wizard = FirstRunWizard()
+        if wizard.exec() != QDialog.Accepted:
+            sys.exit(0)
+        # после мастера услуги добавлены
+
+    # Запускаем главное окно
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
