@@ -505,26 +505,17 @@ class MainWindow(QMainWindow):
         ) = result
         # Теперь нужно показать окно с результатами. Создадим новый класс ResultWindow.
         self.result_window = ResultWindow(
-            results_data,
-            current_readings,
-            costs,
-            total_amount,
-            total_fee,
-            total_sum_with_fee,
-        )
+    results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee,
+    config.services, save_services
+)
         self.result_window.show()
 
 
 class ResultWindow(QDialog):  # или QDialog
-    def __init__(
-        self,
-        results_data,
-        current_readings,
-        costs,
-        total_amount,
-        total_fee,
-        total_sum_with_fee,
-    ):
+    def __init__(self, results_data, current_readings, costs, 
+                 total_amount, total_fee, 
+                 total_sum_with_fee, services, 
+                 save_services_callback):
         super().__init__()
         self.setWindowTitle("Результаты расчёта")
         self.setFixedWidth(850)  # фиксируем ширину окна
@@ -534,6 +525,8 @@ class ResultWindow(QDialog):  # или QDialog
         self.total_amount = total_amount
         self.total_fee = total_fee
         self.total_sum_with_fee = total_sum_with_fee
+        self.services = services
+        self.save_services_callback = save_services_callback
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         layout = QVBoxLayout(self)
@@ -615,10 +608,18 @@ class ResultWindow(QDialog):  # или QDialog
             total_sum_with_fee_name, 0, 2
         )  # Разместили header_name в 3 столбце 1 строки сетки
 
-        # Кнопка закрытия
-        close_btn = QPushButton("Закрыть")
-        close_btn.clicked.connect(self.close)
-        layout.addWidget(close_btn)
+        # Кнопки
+        button_layout = QHBoxLayout()
+        self.save_btn = QPushButton("✅ Сохранить и закрыть")
+        self.close_btn = QPushButton("❌ Закрыть без сохранения")
+        button_layout.addWidget(self.save_btn)
+        button_layout.addWidget(self.close_btn)
+        # Добавляем button_layout в основной layout (в конец)
+
+        self.save_btn.clicked.connect(self.save_and_close)
+        self.close_btn.clicked.connect(self.reject)  # reject закрывает диалог
+        
+        layout.addLayout(button_layout)
 
         # Установка фиксированной высоты окна по содержимому
         self.setLayout(layout)
@@ -632,6 +633,30 @@ class ResultWindow(QDialog):  # или QDialog
             total_table_height + margins.top() + margins.bottom() + 80
         )  # запас на итоги и кнопку
         self.setFixedHeight(total_height)
+
+    def save_and_close(self):
+        from file_manager import save_readings_to_history
+        from PySide6.QtWidgets import QMessageBox
+
+        # Сохраняем историю
+        save_readings_to_history(self.current_readings, self.costs, self.total_sum_with_fee)
+
+        # Обновляем начальные значения для meter-услуг
+        for key, reading in self.current_readings.items():
+            if key in self.services and self.services[key]["type"] == "metered":
+                self.services[key]["start_value"] = reading
+
+        # Сохраняем услуги
+        self.save_services_callback()
+
+        # Сообщение пользователю
+        msg = "Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n"
+        for key, reading in self.current_readings.items():
+            service_name = self.services[key].get("name", key)
+            msg += f"{service_name}: {reading}\n"
+        QMessageBox.information(self, "Готово", msg)
+
+        self.accept()  # закрываем окно
 
 class AddServiceDialog(QDialog):
     def __init__(self, services, parent=None):
