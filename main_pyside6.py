@@ -604,16 +604,62 @@ class MainWindow(QMainWindow):
                 )  # Размещаем виджет в сетке во втором столбце
 
             # Чекбокс комиссии
-            fee_percent = int(service.get("fee", 0.0) * 100)
-            cb = QCheckBox(
-                f"{fee_percent}%"
-            )  # Создаем виджет чекбокса в формате "(размер комиссии)%"
-            self.grid_layout.addWidget(
-                cb, row, 2, alignment=Qt.AlignCenter
-            )  # Размещаем чекбокс в сетке в третьем столбце и выравниваем по центру
-            self.checkboxes[key] = (
-                cb  # Сохраняем объект чекбокса (cb) в словарь self.checkboxes под ключом, соответствующим идентификатору услуги (например, "gas", "electricity")
-            )
+            cb = QCheckBox()
+            fee = service.get('fee')  # может быть None или число
+            if fee is not None:
+                cb.setText(f"{int(fee*100)}%")
+            else:
+                cb.setText("Мой банк берёт комиссию")
+
+            def on_checkbox_toggled(checked, key=key, cb=cb):
+                if not checked:
+                    # Если галочку сняли – ничего дополнительного не делаем
+                    return
+                # Если пытаются поставить галочку
+                if fee is not None:
+                    # Комиссия уже задана – разрешаем включить (ничего не делаем дополнительно)
+                    return
+                # Комиссия не задана – открываем диалог
+                dialog = QDialog(self)
+                dialog.setWindowTitle("Настройка комиссии банка")
+                dialog.setMinimumWidth(300)
+                layout = QVBoxLayout(dialog)
+                layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:"))
+                percent_edit = QLineEdit()
+                layout.addWidget(percent_edit)
+                buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+                buttons.accepted.connect(dialog.accept)
+                buttons.rejected.connect(dialog.reject)
+                layout.addWidget(buttons)
+                if dialog.exec():
+                    try:
+                        percent = float(percent_edit.text())
+                        if percent < 0 or percent > 100:
+                            raise ValueError
+                        # Сохраняем комиссию
+                        service['fee'] = percent / 100.0
+                        save_services()
+                        # Обновляем текст чекбокса
+                        cb.setText(f"{int(percent)}%")
+                        # Галочка остаётся включённой (так как пользователь её только что поставил)
+                        # Нам нужно, чтобы чекбокс был в положении checked, и его состояние сохранилось.
+                        # Сигнал уже отработал, и checked=True. Мы его не сбрасываем.
+                        # Дополнительно ничего не делаем.
+                    except:
+                        QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
+                        # Если ошибка, сбрасываем галочку
+                        cb.blockSignals(True)
+                        cb.setChecked(False)
+                        cb.blockSignals(False)
+                else:
+                    # Отмена – сбрасываем галочку
+                    cb.blockSignals(True)
+                    cb.setChecked(False)
+                    cb.blockSignals(False)
+
+            cb.toggled.connect(on_checkbox_toggled)
+            self.checkboxes[key] = cb
+            self.grid_layout.addWidget(cb, row, 2, alignment=Qt.AlignCenter)
 
             row += 1
 
@@ -866,15 +912,7 @@ class AddServiceDialog(QDialog):
         )
         layout.addWidget(self.tariff_edit)
 
-        # Комиссия (%)
-        layout.addWidget(QLabel("Комиссия (%):"))
-        self.fee_edit = QLineEdit()
-        self.fee_edit.setToolTip(
-            "Укажите комиссию банка в процентах (0 – если комиссия не взимается)."
-        )
-        layout.addWidget(self.fee_edit)
-
-        # Включена ли
+        # Включена ли услуга
         self.enabled_check = QCheckBox("Включена")
         self.enabled_check.setChecked(True)
         self.enabled_check.setToolTip("Если галочка снята, услуга не будет отображаться в главном окне и не будет учитываться в расчётах.")
@@ -915,21 +953,12 @@ class AddServiceDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", "Тариф должен быть положительным числом")
             return
 
-        try:
-            fee_percent = float(self.fee_edit.text().strip())
-            if fee_percent < 0 or fee_percent > 100:
-                raise ValueError
-            fee = fee_percent / 100.0
-        except:
-            QMessageBox.warning(self, "Ошибка", "Комиссия должна быть числом от 0 до 100")
-            return
-
         new_service = {
             "name": name,
             "type": service_type,
             "enabled": self.enabled_check.isChecked(),
             "tariff": tariff,
-            "fee": fee
+            # "fee" отсутствует – будет добавлен позже при настройке комиссии через чекбокс
         }
         if service_type == "metered":
             try:

@@ -155,7 +155,7 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
         name = service["name"]
         service_type = service["type"]
         tariff = service["tariff"]
-        fee = service["fee"]
+        fee = service.get('fee', 0.0)  # по умолчанию 0
         has_commission = commissions.get(key, False)
         
         if service_type == "metered":
