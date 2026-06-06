@@ -471,6 +471,7 @@ class MainWindow(QMainWindow):
         self.grid_layout.setColumnStretch(0, 1)   # первая колонка будет растягиваться
         self.grid_layout.setColumnStretch(1, 0)   # вторая – фиксированной ширины
         self.grid_layout.setColumnStretch(2, 0)   # третья – фиксированной
+        self.grid_layout.setColumnStretch(3, 0)   # для кнопки действия
         panel_layout.addWidget(self.services_container)
 
         # Кнопка "Рассчитать"
@@ -571,6 +572,8 @@ class MainWindow(QMainWindow):
             Qt.AlignCenter | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по центру горизонтально и вертикально
         self.grid_layout.addWidget(header_comm, 0, 2)
+        header_actions = QLabel("<b>Действия</b>")
+        self.grid_layout.addWidget(header_actions, 0, 3)
 
         row = 1
         # Проходим по всем услугам из config
@@ -661,6 +664,28 @@ class MainWindow(QMainWindow):
             self.checkboxes[key] = cb
             self.grid_layout.addWidget(cb, row, 2, alignment=Qt.AlignCenter)
 
+            if service["type"] == "metered":
+                replace_btn = QPushButton("Поменялся счётчик")
+                replace_btn.setFixedWidth(130)
+                replace_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+                replace_btn.clicked.connect(lambda checked, k=key: self.replace_meter(k))
+                self.grid_layout.addWidget(replace_btn, row, 3, alignment=Qt.AlignCenter)
+            else:
+                self.grid_layout.addWidget(QLabel(""), row, 3)   # пустое место для выравнивания
+
             row += 1
 
             # # Настраиваем растяжение колонок
@@ -673,15 +698,24 @@ class MainWindow(QMainWindow):
             msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
             for key, service in config.services.items():
                 if service.get("type") == "metered" and service.get("enabled"):
-                    start_val = service.get("start_value", 0)
-                    msg_lines.append(f"{service['name']}: {start_val}")
-            if len(msg_lines) > 1:  # есть хотя бы одна услуга по счётчику
-                msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
-                QMessageBox.information(self, "Информация", msg)
+                    start_val = service.get('start_value', 0)
+                    replacements = service.get('replacements', [])
+                    if replacements:
+                        msg_lines.append(f"{service['name']}: {start_val} (после замены счётчика)")
+                    else:
+                        msg_lines.append(f"{service['name']}: {start_val}")
+            msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
+            QMessageBox.information(self, "Информация", msg)
         
         self.adjustSize()  # Размеры окна автоматически настраиваются под его содержание
         self.setMinimumSize(500, 400)  # Задаем минимальные размеры окна
 
+    def replace_meter(self, key):
+        service = config.services[key]
+        dialog = MeterReplacementDialog(service, self)
+        if dialog.exec():
+            self.rebuild_services_ui()   # обновить отображение (начальное значение могло измениться)
+    
     def calculate(self):
         readings = {key: entry.text() for key, entry in self.entries.items()}
         commissions = {key: cb.isChecked() for key, cb in self.checkboxes.items()}
@@ -856,6 +890,8 @@ class ResultWindow(QDialog):  # или QDialog
         for key, reading in self.current_readings.items():
             if key in self.services and self.services[key]["type"] == "metered":
                 self.services[key]["start_value"] = reading
+                if "replacements" in self.services[key]:
+                    del self.services[key]["replacements"]
 
         # Сохраняем услуги
         self.save_services_callback()
@@ -1025,6 +1061,16 @@ class EditServiceDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+        self.replace_button = QPushButton("Замена счётчика")
+        self.replace_button.clicked.connect(self.replace_meter)
+        layout.addWidget(self.replace_button)
+
+    def replace_meter(self):
+        dialog = MeterReplacementDialog(self.service, self)
+        if dialog.exec():
+            # Возможно, потребуется обновить отображение, но пока ничего не делаем
+            pass
+    
     def accept(self):
         name = self.name_edit.text().strip()
         if not name:
@@ -1074,6 +1120,50 @@ class EditServiceDialog(QDialog):
         if new_key != self.key:
             del self.services[self.key]
         self.services[new_key] = updated
+        save_services()
+        super().accept()
+
+class MeterReplacementDialog(QDialog):
+    def __init__(self, service, parent=None):
+        super().__init__(parent)
+        self.service = service
+        self.setWindowTitle("Замена счётчика")
+        self.setMinimumWidth(300)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Показания старого счётчика на момент замены:"))
+        self.old_edit = QLineEdit()
+        layout.addWidget(self.old_edit)
+        layout.addWidget(QLabel("Показания нового счётчика на момент установки:"))
+        self.new_edit = QLineEdit()
+        layout.addWidget(self.new_edit)
+        layout.addWidget(QLabel("Дата (необязательно, в формате ГГГГ-ММ-ДД):"))
+        self.date_edit = QLineEdit()
+        layout.addWidget(self.date_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self):
+        from communal_calculator import normalize_decimal
+        try:
+            old_final = float(normalize_decimal(self.old_edit.text()))
+            new_start = float(normalize_decimal(self.new_edit.text()))
+        except:
+            QMessageBox.warning(self, "Ошибка", "Введите корректные числа")
+            return
+        current_start = self.service.get("start_value", 0)
+        if old_final < current_start:
+            QMessageBox.warning(self, "Ошибка", "Показания старого счётчика не могут быть меньше начального")
+            return
+        replacements = self.service.get("replacements", [])
+        replacements.append({
+            "old_final": old_final,
+            "new_start": new_start,
+            "date": self.date_edit.text().strip()
+        })
+        self.service["replacements"] = replacements
+        from communal_calculator import save_services
         save_services()
         super().accept()
 

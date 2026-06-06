@@ -23,6 +23,30 @@ def get_start_values():
         "water": config.services["water"]["start_value"]
     }
 
+def calculate_consumption_with_replacements(start_value, replacements, current_reading):
+    """
+    Рассчитывает общий расход ресурса с учётом замен счётчиков.
+    start_value: показания на начало периода (последние оплаченные)
+    replacements: список замен, каждая: {'old_final': float, 'new_start': float, 'date': str (optional)}
+    current_reading: текущее показание (последнее введённое)
+    Возвращает общий расход (float).
+    """
+    total = Decimal('0')
+    last = start_value
+    # Сортируем замены по дате, если даты нет, то по порядку добавления (оставляем как есть)
+    # Для простоты сортируем по 'date', если поле отсутствует, ставим пустую строку
+    sorted_reps = sorted(replacements, key=lambda x: x.get('date', ''))
+    for rep in sorted_reps:
+        old_final = rep['old_final']
+        new_start = rep['new_start']
+        if old_final < last:
+            # некорректные данные, но можно просто пропустить или добавить 0
+            continue
+        total += old_final - last
+        last = new_start
+    total += current_reading - last
+    return total
+
 def get_tariffs():
     """Возвращает словарь с текущими тарифами."""
     return {
@@ -167,8 +191,16 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             try:
                 end = Decimal(normalized)
                 start = Decimal(service.get("start_value", 0))
-                consumption = end - start
-                amount = consumption * Decimal(str(tariff))
+                replacements = service.get("replacements", [])
+                # Преобразуем замены в Decimal
+                dec_replacements = []
+                for rep in replacements:
+                    dec_replacements.append({
+                        "old_final": Decimal(rep["old_final"]),
+                        "new_start": Decimal(rep["new_start"])
+                    })
+                total_consumption = calculate_consumption_with_replacements(start, dec_replacements, end)
+                amount = total_consumption * Decimal(str(tariff))
                 if has_commission:
                     fee_amount = amount * Decimal(str(fee))
                 else:
@@ -180,11 +212,17 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                 else:
                     raise ValueError(f"В поле '{name}' введите корректное число!")
                 return None
+            except InvalidOperation:
+                if error_callback:
+                    error_callback(name, "Введите корректное число!")
+                else:
+                    raise ValueError(f"В поле '{name}' введите корректное число!")
+                return None
             result = {
                 "Name": name,
                 "Start value": start,
                 "End value": end,
-                "Consumption": consumption,
+                "Consumption": total_consumption,
                 "Tariff": tariff,
                 "Amount": amount,
                 "Fee": fee_amount,
