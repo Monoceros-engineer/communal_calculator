@@ -1,6 +1,7 @@
 import sys
 import os
 import traceback
+from database import init_db, save_bill
 
 try:
     from PySide6.QtWidgets import (
@@ -614,13 +615,10 @@ class MainWindow(QMainWindow):
             else:
                 cb.setText("Мой банк берёт комиссию")
 
-            def on_checkbox_toggled(checked, key=key, cb=cb):
+            def on_checkbox_toggled(checked, key=key, cb=cb, service=service):
                 if not checked:
-                    # Если галочку сняли – ничего дополнительного не делаем
                     return
-                # Если пытаются поставить галочку
-                if fee is not None:
-                    # Комиссия уже задана – разрешаем включить (ничего не делаем дополнительно)
+                if service.get('fee') is not None:
                     return
                 # Комиссия не задана – открываем диалог
                 dialog = QDialog(self)
@@ -639,23 +637,15 @@ class MainWindow(QMainWindow):
                         percent = float(percent_edit.text())
                         if percent < 0 or percent > 100:
                             raise ValueError
-                        # Сохраняем комиссию
                         service['fee'] = percent / 100.0
                         save_services()
-                        # Обновляем текст чекбокса
                         cb.setText(f"{int(percent)}%")
-                        # Галочка остаётся включённой (так как пользователь её только что поставил)
-                        # Нам нужно, чтобы чекбокс был в положении checked, и его состояние сохранилось.
-                        # Сигнал уже отработал, и checked=True. Мы его не сбрасываем.
-                        # Дополнительно ничего не делаем.
                     except:
                         QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
-                        # Если ошибка, сбрасываем галочку
                         cb.blockSignals(True)
                         cb.setChecked(False)
                         cb.blockSignals(False)
                 else:
-                    # Отмена – сбрасываем галочку
                     cb.blockSignals(True)
                     cb.setChecked(False)
                     cb.blockSignals(False)
@@ -880,11 +870,32 @@ class ResultWindow(QDialog):  # или QDialog
         self.setFixedHeight(total_height)
 
     def save_and_close(self):
-        from file_manager import save_readings_to_history
-        from PySide6.QtWidgets import QMessageBox
+        from database import save_bill
+        from datetime import datetime
 
-        # Сохраняем историю
-        save_readings_to_history(self.current_readings, self.costs, self.total_sum_with_fee)
+        # Подготовка данных для БД
+        details = []
+        bill_data = {
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'total_amount': float(self.total_amount),
+            'total_fee': float(self.total_fee),
+            'total_with_fee': float(self.total_sum_with_fee),
+            'details': [],
+            'used_replacements': []
+        }
+        for data in self.results_data:
+            details.append({
+                'service_key': data.get("Key"),
+                'service_name': data["Name"],
+                'start_reading': data.get("Start value") if data.get("Start value") != "—" else None,
+                'end_reading': data.get("End value") if data.get("End value") != "—" else None,
+                'consumption': data.get("Consumption") if data.get("Consumption") != "—" else None,
+                'tariff': data["Tariff"],
+                'amount': float(data["Amount"]),
+                'fee': float(data["Fee"]),
+                'total': float(data["Total"])
+            })
+        save_bill(bill_data)
 
         # Обновляем начальные значения для meter-услуг
         for key, reading in self.current_readings.items():
@@ -893,17 +904,37 @@ class ResultWindow(QDialog):  # или QDialog
                 if "replacements" in self.services[key]:
                     del self.services[key]["replacements"]
 
-        # Сохраняем услуги
+        # Сохраняем услуги в JSON (пока оставим для совместимости)
         self.save_services_callback()
 
-        # Сообщение пользователю
+        # Показываем сообщение
         msg = "Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n"
         for key, reading in self.current_readings.items():
             service_name = self.services[key].get("name", key)
             msg += f"{service_name}: {reading}\n"
         QMessageBox.information(self, "Готово", msg)
 
-        self.accept()  # закрываем окно
+        self.accept()
+
+    def _prepare_bill_data(self):
+        """Подготавливает словарь для сохранения в БД."""
+        from datetime import datetime
+        details = []
+        used_replacements = []
+        for i, data in enumerate(self.results_data):
+            service_key = list(self.services.keys())[i]  # нужно сопоставить по порядку; лучше передавать key
+            # Но в results_data нет ключа, поэтому лучше модифицировать calculate, чтобы results_data содержал ключ.
+            # Пока сделаем костыль: сопоставляем по имени (не надёжно).
+            # Чтобы избежать этого, нужно в results_data добавить поле "key". Это потребует изменений в process_services_data.
+            # Для начала создадим словарь service_keys по имени.
+        return {
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'total_amount': self.total_amount,
+            'total_fee': self.total_fee,
+            'total_sum_with_fee': self.total_sum_with_fee,  # в save_and_close используется total_sum_with_fee
+            'details': details,
+            'used_replacements': used_replacements
+        }
 
 class AddServiceDialog(QDialog):
     def __init__(self, services, parent=None):
@@ -1479,6 +1510,9 @@ if __name__ == "__main__":
             background-color: #a0a0a0;
         }
     """)
+
+    # Инициализация базы данных (создаст файл communal.db)
+    init_db()
 
     # Проверяем, есть ли услуги
     load_settings()

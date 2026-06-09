@@ -206,23 +206,20 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                 else:
                     fee_amount = Decimal('0')
                 total = amount + fee_amount
+                print(f"DEBUG: {key} has_commission={has_commission}, fee={fee}")
             except InvalidOperation:
                 if error_callback:
                     error_callback(name, "Введите корректное число!")
                 else:
                     raise ValueError(f"В поле '{name}' введите корректное число!")
                 return None
-            except InvalidOperation:
-                if error_callback:
-                    error_callback(name, "Введите корректное число!")
-                else:
-                    raise ValueError(f"В поле '{name}' введите корректное число!")
-                return None
+
             result = {
+                "Key": key,
                 "Name": name,
                 "Start value": start,
                 "End value": end,
-                "Consumption": total_consumption,
+                "Consumption": total_consumption,   # используем total_consumption, как вы вычислили
                 "Tariff": tariff,
                 "Amount": amount,
                 "Fee": fee_amount,
@@ -236,8 +233,8 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             total_sum_with_fee += total
         else:  # fixed
             result = calculate_fixed_service(name, tariff, has_commission, fee)
+            result["Key"] = key
             results_data.append(result)
-            # для fixed нет показаний
             costs[key] = result["Amount"]
             total_amount += result["Amount"]
             total_fee += result["Fee"]
