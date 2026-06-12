@@ -213,6 +213,28 @@ class WelcomeWindow(QDialog):
                                (self.height() - self.start_button.height()) // 2)
         self.start_button.clicked.connect(self.on_start)
 
+        # Кнопка помощи
+        self.help_button = QPushButton("Помощь", self)
+        self.help_button.setFixedSize(200, 40)
+        self.help_button.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                background-color: #3498db;
+                color: white;
+                border-radius: 10px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #1c6ea4;
+            }
+        """)
+        self.help_button.move((self.width() - self.help_button.width()) // 2,
+                            (self.height() - self.start_button.height()) // 2 + 70)
+        self.help_button.clicked.connect(self.open_help)
+
     def on_start(self):
         self.accept()  # закрываем окно с кодом Accepted
 
@@ -221,6 +243,16 @@ class WelcomeWindow(QDialog):
         self.start_button.move((self.width() - self.start_button.width()) // 2,
                                (self.height() - self.start_button.height()) // 2)
         super().resizeEvent(event)
+
+    def open_help(self):
+        import webbrowser
+        import os
+        from PySide6.QtWidgets import QMessageBox
+        help_path = resource_path("help.html")
+        if os.path.exists(help_path):
+            webbrowser.open(help_path)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Файл справки не найден.")
 
 class FirstRunWizard(QDialog):
     def __init__(self, parent=None):
@@ -295,9 +327,12 @@ class FirstRunWizard(QDialog):
         # Кнопки
         btn_layout = QHBoxLayout()
         self.btn_add = QPushButton("Добавить услугу")
+        self.btn_help = QPushButton("Помощь")
         self.btn_finish = QPushButton("✅ Готово")
         self.btn_finish.setEnabled(False)
+
         btn_layout.addWidget(self.btn_add)
+        btn_layout.addWidget(self.btn_help)
         btn_layout.addStretch()
         btn_layout.addWidget(self.btn_finish)
         panel_layout.addLayout(btn_layout)
@@ -318,12 +353,15 @@ class FirstRunWizard(QDialog):
         """
 
         self.btn_add.setStyleSheet(button_style)
+        self.btn_help.setStyleSheet(button_style)
         self.btn_finish.setStyleSheet(button_style)
         
         self.btn_add.setToolTip("Нажмите, чтобы добавить новую услугу (газ, свет, вода, интернет и т.д.).")
         self.btn_finish.setToolTip("Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню 'Настройки').")
+        self.btn_help.setToolTip("Нажмите, чтобы получить подробную справку и ознакомиться с руководством пользователя")
 
         self.btn_add.clicked.connect(self.add_service)
+        self.btn_help.clicked.connect(self.open_help)
         self.btn_finish.clicked.connect(self.accept)
 
         # Обновляем список
@@ -348,6 +386,16 @@ class FirstRunWizard(QDialog):
         if dialog.exec():
             self.update_services_list()
             save_services()
+
+    def open_help(self):
+        import webbrowser
+        import os
+        from PySide6.QtWidgets import QMessageBox
+        help_path = resource_path("help.html")
+        if os.path.exists(help_path):
+            webbrowser.open(help_path)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Файл справки не найден.")
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -522,33 +570,15 @@ class MainWindow(QMainWindow):
 
     def open_help(self):
         import webbrowser
-        import tempfile
         import os
         from PySide6.QtWidgets import QMessageBox
 
-        readme_path = resource_path("README.md")
-        if not os.path.exists(readme_path):
-            QMessageBox.warning(self, "Ошибка", "Файл справки (README.md) не найден.")
-            return
-
-        try:
-            with open(readme_path, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception as e:
-            QMessageBox.warning(self, "Ошибка", f"Не удалось прочитать README.md: {e}")
-            return
-
-        html_content = f"""<!DOCTYPE html>
-    <html>
-    <head><meta charset="utf-8"><title>Справка - Калькулятор коммуналки</title></head>
-    <body><pre style="font-family: Arial, sans-serif;">{content}</pre></body>
-    </html>"""
-
-        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
-            f.write(html_content)
-            temp_html = f.name
-
-        webbrowser.open(temp_html)
+        # Путь к файлу help.html (рядом с программой или в ресурсах)
+        help_path = resource_path("help.html")
+        if os.path.exists(help_path):
+            webbrowser.open(help_path)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
 
     def rebuild_services_ui(self):
         # Очищаем все строки сетки, кроме первой(с заголовками)
