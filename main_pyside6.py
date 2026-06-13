@@ -43,13 +43,15 @@ except Exception as e:
     print("Import error:", e)
     sys.exit(1)
 
+
 # Загружаем настройки из JSON (заполнит config.services)
 load_settings()
 
 def resource_path(relative_path):
-    """Получить абсолютный путь к ресурсу, работает для разработки и для PyInstaller."""
+    """Получить абсолютный путь к ресурсу, работает для разработки, PyInstaller и cx_Freeze."""
     if getattr(sys, 'frozen', False):
-        base_path = sys._MEIPASS
+        # cx_Freeze и PyInstaller: исполняемый файл
+        base_path = os.path.dirname(sys.executable)
     else:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)

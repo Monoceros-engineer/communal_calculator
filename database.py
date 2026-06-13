@@ -1,10 +1,14 @@
+import os
+import sys
 import sqlite3
 import json
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from paths import get_db_path   # импортируем из paths
 
-DB_PATH = Path(__file__).parent / "communal.db"
+# Путь к базе данных – используем функцию из paths
+DB_PATH = get_db_path()
 
 def init_db():
     """Создаёт таблицы, если они не существуют."""

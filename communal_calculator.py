@@ -1,5 +1,4 @@
 from calculator import calculate_service, calculate_fixed_service
-from gui import show_results_window
 import config
 from file_manager import save_settings, save_readings_to_history
 from decimal import Decimal, InvalidOperation
@@ -125,8 +124,6 @@ def calculate_dynamic(entries, services_frame, services, warning_callback, error
                 if key in services and services[key]["type"] == "metered":
                     services[key]["start_value"] = reading
             save_services_callback()
-
-        show_results_window(results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, save_readings, services)
 
     except Exception as e:
         print(f"ERROR in calculate_dynamic: {e}")

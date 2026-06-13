@@ -2,9 +2,10 @@ import os
 import json
 import config
 from datetime import datetime
+from paths import get_config_path
 
 # Файлы для хранения настроек и истории
-CONFIG_FILE = "calculator_config.json"
+CONFIG_FILE = get_config_path()
 HISTORY_FILE = "readings_history.json"
 
 
