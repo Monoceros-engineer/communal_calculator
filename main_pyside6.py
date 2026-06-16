@@ -906,27 +906,32 @@ class ResultWindow(QDialog):  # или QDialog
         from datetime import datetime
 
         # Подготовка данных для БД
+        def to_float(value):
+            if value is None or value == "—" or value == "-":
+                return None
+            return float(value)
         details = []
+        for data in self.results_data:
+            details.append({
+                'service_key': data.get("Key"),
+                'service_name': data["Name"],
+                'start_reading': to_float(data.get("Start value")),
+                'end_reading': to_float(data.get("End value")),
+                'consumption': to_float(data.get("Consumption")),
+                'tariff': float(data["Tariff"]),   # tariff всегда число
+                'amount': float(data["Amount"]),
+                'fee': float(data["Fee"]),
+                'total': float(data["Total"])
+            })
+
         bill_data = {
             'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'total_amount': float(self.total_amount),
             'total_fee': float(self.total_fee),
             'total_with_fee': float(self.total_sum_with_fee),
-            'details': [],
+            'details': details,
             'used_replacements': []
         }
-        for data in self.results_data:
-            details.append({
-                'service_key': data.get("Key"),
-                'service_name': data["Name"],
-                'start_reading': data.get("Start value") if data.get("Start value") != "—" else None,
-                'end_reading': data.get("End value") if data.get("End value") != "—" else None,
-                'consumption': data.get("Consumption") if data.get("Consumption") != "—" else None,
-                'tariff': data["Tariff"],
-                'amount': float(data["Amount"]),
-                'fee': float(data["Fee"]),
-                'total': float(data["Total"])
-            })
         save_bill(bill_data)
 
         # Обновляем начальные значения для meter-услуг
