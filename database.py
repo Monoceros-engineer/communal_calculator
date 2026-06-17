@@ -1,10 +1,5 @@
-import os
-import sys
 import sqlite3
 import json
-from datetime import datetime
-from decimal import Decimal
-from pathlib import Path
 from paths import get_db_path   # импортируем из paths
 
 # Путь к базе данных – используем функцию из paths
@@ -146,6 +141,7 @@ def save_bill(bill_data):
             cursor.execute("UPDATE meter_replacements SET is_paid = 1 WHERE id = ?", (rep_id,))
         
         conn.commit()
+        return bill_id
 
 def migrate_from_json():
     """Переносит данные из calculator_config.json и readings_history.json в SQLite.
@@ -188,7 +184,137 @@ def migrate_from_json():
             'total_with_fee': record['total'],
             'details': []
         }
-        # Для простоты пока не будем переносить историю, так как это сложно. Можно отложить.
-        # Для версии 1.1 достаточно, чтобы новая версия программы работала с БД, а старые данные останутся в JSON.
-        # При первом запуске после перехода на SQLite мы можем просто проигнорировать старые файлы или предложить миграцию.
     pass
+
+# ===== УСЛУГИ =====
+
+def save_service(key, service):
+    """Сохраняет услугу в таблицу services (вставка или обновление)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO services (key, name, type, enabled, tariff, fee, start_value)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            key,
+            service['name'],
+            service['type'],
+            1 if service.get('enabled', True) else 0,
+            service['tariff'],
+            service.get('fee', 0.0),
+            service.get('start_value')
+        ))
+        conn.commit()
+
+def delete_service(key):
+    """Удаляет услугу из таблицы services."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM services WHERE key = ?", (key,))
+        conn.commit()
+
+def load_services():
+    """Загружает все услуги с их заменами из SQLite."""
+    services = {}
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        # Загружаем услуги
+        cursor.execute("SELECT id, key, name, type, enabled, tariff, fee, start_value FROM services")
+        rows = cursor.fetchall()
+        for row in rows:
+            id_, key, name, type_, enabled, tariff, fee, start_value = row
+            services[key] = {
+                'id': id_,
+                'name': name,
+                'type': type_,
+                'enabled': bool(enabled),
+                'tariff': tariff,
+                'fee': fee,
+                'start_value': start_value,
+                'replacements': []   # заполним позже
+            }
+
+        # Загружаем замены для всех услуг
+        cursor.execute("SELECT id, service_id, old_final, new_start, date, is_paid FROM meter_replacements")
+        replacements_rows = cursor.fetchall()
+        # Создаём словарь service_id -> key, чтобы связать замены с услугами
+        cursor.execute("SELECT id, key FROM services")
+        id_to_key = {row[0]: row[1] for row in cursor.fetchall()}
+
+        for rep_id, service_id, old_final, new_start, date, is_paid in replacements_rows:
+            key = id_to_key.get(service_id)
+            if key and key in services:
+                services[key]['replacements'].append({
+                    'id': rep_id,                        # ← добавляем ID
+                    'old_final': old_final,
+                    'new_start': new_start,
+                    'date': date,
+                    'is_paid': bool(is_paid)
+                })
+
+    return services
+
+# ===== ЗАМЕНЫ =====
+
+def add_replacement(service_id, old_final, new_start, date=None):
+    """Добавляет замену счётчика."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO meter_replacements (service_id, old_final, new_start, date, is_paid)
+            VALUES (?, ?, ?, ?, 0)
+        """, (service_id, old_final, new_start, date))
+        conn.commit()
+        return cursor.lastrowid
+
+def get_service_id_by_key(key):
+    """Возвращает id услуги по её ключу."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM services WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+def mark_replacements_paid(service_id, bill_id):
+    """Помечает все неоплаченные замены для услуги как оплаченные и связывает с bill."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        # Находим все неоплаченные замены
+        cursor.execute("SELECT id FROM meter_replacements WHERE service_id = ? AND is_paid = 0", (service_id,))
+        rep_ids = [row[0] for row in cursor.fetchall()]
+        if rep_ids:
+            # Помечаем как оплаченные
+            cursor.execute("UPDATE meter_replacements SET is_paid = 1 WHERE id IN ({})".format(','.join('?' * len(rep_ids))), rep_ids)
+            # Связываем с bill
+            for rep_id in rep_ids:
+                cursor.execute("INSERT OR IGNORE INTO bill_replacements (bill_id, replacement_id) VALUES (?, ?)", (bill_id, rep_id))
+        conn.commit()
+
+def get_replacements(service_id):
+    """Возвращает список замен для услуги (без учёта оплаты)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, old_final, new_start, date, is_paid FROM meter_replacements WHERE service_id = ?", (service_id,))
+        rows = cursor.fetchall()
+        return [{'id': r[0], 'old_final': r[1], 'new_start': r[2], 'date': r[3], 'is_paid': bool(r[4])} for r in rows]
+
+def clear_paid_replacements(service_id):
+    """Удаляет оплаченные замены для услуги (после сохранения истории)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM meter_replacements WHERE service_id = ? AND is_paid = 1", (service_id,))
+        conn.commit()
+
+def mark_replacements_paid(rep_ids, bill_id):
+    """Помечает замены как оплаченные и связывает их с указанным счётом."""
+    if not rep_ids:
+        return
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        # Помечаем как оплаченные
+        placeholders = ','.join('?' * len(rep_ids))
+        cursor.execute(f"UPDATE meter_replacements SET is_paid = 1 WHERE id IN ({placeholders})", rep_ids)
+        # Связываем с bill
+        for rep_id in rep_ids:
+            cursor.execute("INSERT OR IGNORE INTO bill_replacements (bill_id, replacement_id) VALUES (?, ?)", (bill_id, rep_id))
+        conn.commit()

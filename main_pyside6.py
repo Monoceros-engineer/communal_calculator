@@ -36,7 +36,7 @@ try:
         save_fees,
         save_services,
     )
-    from file_manager import save_readings_to_history, load_settings
+    from file_manager import load_settings
     from config import services  # или import config, затем использовать config.services
     import random
 except Exception as e:
@@ -733,10 +733,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(500, 400)  # Задаем минимальные размеры окна
 
     def replace_meter(self, key):
-        service = config.services[key]
-        dialog = MeterReplacementDialog(service, self)
-        if dialog.exec():
-            self.rebuild_services_ui()   # обновить отображение (начальное значение могло измениться)
+        dialog = MeterReplacementDialog(key, self)
+        dialog.exec()
     
     def calculate(self):
         readings = {key: entry.text() for key, entry in self.entries.items()}
@@ -769,20 +767,20 @@ class MainWindow(QMainWindow):
             total_amount,
             total_fee,
             total_sum_with_fee,
+            used_replacement_ids,
         ) = result
         # Теперь нужно показать окно с результатами. Создадим новый класс ResultWindow.
         self.result_window = ResultWindow(
     results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee,
-    config.services, save_services
+    config.services, save_services, used_replacement_ids  # ← передаём
 )
         self.result_window.show()
 
 
-class ResultWindow(QDialog):  # или QDialog
+class ResultWindow(QDialog):
     def __init__(self, results_data, current_readings, costs, 
-                 total_amount, total_fee, 
-                 total_sum_with_fee, services, 
-                 save_services_callback):
+                 total_amount, total_fee, total_sum_with_fee, 
+                 services, save_services_callback, used_replacement_ids):
         super().__init__()
         self.setWindowTitle("Результаты расчёта")
         self.setFixedWidth(850)  # фиксируем ширину окна
@@ -794,6 +792,7 @@ class ResultWindow(QDialog):  # или QDialog
         self.total_sum_with_fee = total_sum_with_fee
         self.services = services
         self.save_services_callback = save_services_callback
+        self.used_replacement_ids = used_replacement_ids
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         layout = QVBoxLayout(self)
@@ -902,7 +901,8 @@ class ResultWindow(QDialog):  # или QDialog
         self.setFixedHeight(total_height)
 
     def save_and_close(self):
-        from database import save_bill
+        from database import save_bill, mark_replacements_paid
+        from file_manager import save_settings
         from datetime import datetime
 
         # Подготовка данных для БД
@@ -932,17 +932,25 @@ class ResultWindow(QDialog):  # или QDialog
             'details': details,
             'used_replacements': []
         }
-        save_bill(bill_data)
+        bill_id = save_bill(bill_data)
 
-        # Обновляем начальные значения для meter-услуг
+        if self.used_replacement_ids:
+            mark_replacements_paid(self.used_replacement_ids, bill_id)
+
+        # Обновляем начальные значения
         for key, reading in self.current_readings.items():
             if key in self.services and self.services[key]["type"] == "metered":
                 self.services[key]["start_value"] = reading
-                if "replacements" in self.services[key]:
-                    del self.services[key]["replacements"]
 
-        # Сохраняем услуги в JSON (пока оставим для совместимости)
-        self.save_services_callback()
+        # Очищаем использованные замены из self.services
+        for key, service in self.services.items():
+            if "replacements" in service:
+                service["replacements"] = [
+                    rep for rep in service["replacements"]
+                    if rep.get('id') not in self.used_replacement_ids
+                ]
+        # Сохраняем услуги в SQLite
+        save_settings()
 
         # Показываем сообщение
         msg = "Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n"
@@ -1192,9 +1200,9 @@ class EditServiceDialog(QDialog):
         super().accept()
 
 class MeterReplacementDialog(QDialog):
-    def __init__(self, service, parent=None):
+    def __init__(self, service_key, parent=None):
         super().__init__(parent)
-        self.service = service
+        self.service_key = service_key
         self.setWindowTitle("Замена счётчика")
         self.setMinimumWidth(300)
         layout = QVBoxLayout(self)
@@ -1214,25 +1222,34 @@ class MeterReplacementDialog(QDialog):
 
     def accept(self):
         from communal_calculator import normalize_decimal
+        from database import get_service_id_by_key, add_replacement
+        from datetime import datetime
+
         try:
             old_final = float(normalize_decimal(self.old_edit.text()))
             new_start = float(normalize_decimal(self.new_edit.text()))
         except:
             QMessageBox.warning(self, "Ошибка", "Введите корректные числа")
             return
-        current_start = self.service.get("start_value", 0)
-        if old_final < current_start:
-            QMessageBox.warning(self, "Ошибка", "Показания старого счётчика не могут быть меньше начального")
+
+        service_id = get_service_id_by_key(self.service_key)
+        if service_id is None:
+            QMessageBox.warning(self, "Ошибка", "Услуга не найдена в базе данных")
             return
-        replacements = self.service.get("replacements", [])
-        replacements.append({
-            "old_final": old_final,
-            "new_start": new_start,
-            "date": self.date_edit.text().strip()
-        })
-        self.service["replacements"] = replacements
-        from communal_calculator import save_services
-        save_services()
+
+        date_str = self.date_edit.text().strip()
+        if not date_str:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+
+        add_replacement(service_id, old_final, new_start, date_str)
+
+        # Перезагружаем услуги из SQLite, чтобы загрузить свежие замены с id
+        from file_manager import load_settings
+        load_settings()
+            
+        if self.parent():
+            self.parent().rebuild_services_ui()
+
         super().accept()
 
 class SettingsWindow(QDialog):

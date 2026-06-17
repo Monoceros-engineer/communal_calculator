@@ -1,6 +1,6 @@
 from calculator import calculate_service, calculate_fixed_service
 import config
-from file_manager import save_settings, save_readings_to_history
+from file_manager import save_settings
 from decimal import Decimal, InvalidOperation
 
 def normalize_decimal(s):
@@ -118,13 +118,6 @@ def calculate_dynamic(entries, services_frame, services, warning_callback, error
         total_fee = sum(item["Fee"] for item in results_data)
         total_sum_with_fee = sum(item["Total"] for item in results_data)
 
-        def save_readings(current_readings, costs, total_sum_with_fee):
-            save_readings_to_history(current_readings, costs, total_sum_with_fee)
-            for key, reading in current_readings.items():
-                if key in services and services[key]["type"] == "metered":
-                    services[key]["start_value"] = reading
-            save_services_callback()
-
     except Exception as e:
         print(f"ERROR in calculate_dynamic: {e}")
         error_callback("Ошибка", f"Произошла ошибка: {type(e).__name__}\n{e}")
@@ -169,22 +162,22 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
     total_amount = Decimal('0')
     total_fee = Decimal('0')
     total_sum_with_fee = Decimal('0')
-    
+    used_replacement_ids = []  # ← новый список
+
     for key, service in config.services.items():
         if not service.get("enabled", True):
             continue
         name = service["name"]
         service_type = service["type"]
         tariff = service["tariff"]
-        fee = service.get('fee', 0.0)  # по умолчанию 0
+        fee = service.get('fee', 0.0)
         has_commission = commissions.get(key, False)
-        
+
         if service_type == "metered":
             value_str = readings.get(key, "").strip()
             if not value_str:
-                continue  # пропускаем пустые поля
-            # нормализуем запятую
-            normalized = normalize_decimal(value_str)  # предполагаем, что normalize_decimal уже определена
+                continue
+            normalized = normalize_decimal(value_str)
             try:
                 end = Decimal(normalized)
                 start = Decimal(service.get("start_value", 0))
@@ -203,20 +196,26 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                 else:
                     fee_amount = Decimal('0')
                 total = amount + fee_amount
-                print(f"DEBUG: {key} has_commission={has_commission}, fee={fee}")
+                # Сохраняем ID использованных замен (если они есть)
+                # Для этого нужно знать ID каждой замены. В текущей структуре service["replacements"] может содержать ID?
+                # В `load_services` мы загружаем замены с полем 'id'. Добавим его.
+                # Пока допустим, что replacements содержит словари с 'id'.
+                # В будущем нужно, чтобы `load_services` добавляла id.
+                for rep in replacements:
+                    if 'id' in rep:
+                        used_replacement_ids.append(rep['id'])
             except InvalidOperation:
                 if error_callback:
                     error_callback(name, "Введите корректное число!")
                 else:
                     raise ValueError(f"В поле '{name}' введите корректное число!")
                 return None
-
             result = {
                 "Key": key,
                 "Name": name,
                 "Start value": start,
                 "End value": end,
-                "Consumption": total_consumption,   # используем total_consumption, как вы вычислили
+                "Consumption": total_consumption,
                 "Tariff": tariff,
                 "Amount": amount,
                 "Fee": fee_amount,
@@ -236,13 +235,12 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             total_amount += result["Amount"]
             total_fee += result["Fee"]
             total_sum_with_fee += result["Total"]
-    
+
     if not results_data:
         if warning_callback:
             warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
         else:
-            # можно вернуть пустые данные
             pass
         return None
-    
-    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee)
+
+    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids)

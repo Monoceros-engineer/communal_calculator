@@ -1,62 +1,58 @@
 import os
 import json
 import config
-from datetime import datetime
-from paths import get_config_path
-
-# Файлы для хранения настроек и истории
-CONFIG_FILE = get_config_path()
-HISTORY_FILE = "readings_history.json"
+from database import load_services, save_service, delete_service, get_service_id_by_key, add_replacement, mark_replacements_paid, clear_paid_replacements
 
 
-# Функции для работы с настройками
+CONFIG_FILE = "calculator_config.json"  # пока оставим, но не будем использовать
+
+def get_old_config_path():
+    import os
+    # Ищем в папке проекта (где file_manager.py)
+    project_path = os.path.dirname(os.path.abspath(__file__))
+    local_path = os.path.join(project_path, CONFIG_FILE)
+    if os.path.exists(local_path):
+        return local_path
+    # Ищем в APPDATA
+    appdata_path = os.path.join(os.getenv('APPDATA'), 'CommunalCalculator', CONFIG_FILE)
+    if os.path.exists(appdata_path):
+        return appdata_path
+    return None
+
+
 def load_settings():
-    """Загружает настройки из файла в config.services"""
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            # Ожидаем, что в файле лежит словарь services
-            if "services" in data:
-                config.services = data["services"]
-            else:
-                # Если файл старого формата, можно попробовать сконвертировать, но пока просто игнорируем
-                pass
-            return True
-        except:
-            return False
+    """Загружает услуги из SQLite или мигрирует из JSON, если БД пуста."""
+    services = load_services()
+    if services:
+        config.services = services
+        return True  # загружено, не первый запуск
     else:
-        return False
+        # Попытка миграции из старого JSON (ищем в папке проекта или APPDATA)
+        old_config_path = get_old_config_path()
+        if old_config_path:
+            try:
+                with open(old_config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                old_services = data.get('services', {})
+                if old_services:
+                    # Сохраняем в SQLite
+                    for key, service in old_services.items():
+                        save_service(key, service)
+                    # Перезагружаем
+                    config.services = load_services()
+                    # Можно удалить JSON после успешной миграции, но пока оставим
+                    return True
+            except Exception as e:
+                print(f"Migration error: {e}")
+                return False
+        return False  # первый запуск
+
+def save_services_to_db(services):
+    """Сохраняет все услуги в SQLite."""
+    for key, service in services.items():
+        save_service(key, service)
 
 def save_settings():
-    """Сохраняет настройки из config.services в файл"""
-    data = {"services": config.services}
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
-        return True
-    except:
-        return False
-    
-def save_readings_to_history(current_readings, costs, total):
-    """Сохраняет текущие показания и затраты в историю (JSON)."""
-    history = []
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                history = json.load(f)
-        except:
-            history = []
-
-    record = {
-        "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-        "readings": current_readings.copy(),   # словарь всех показаний
-        "costs": {k: float(v) for k, v in costs.items()},
-        "total": float(total)
-    }
-    history.append(record)
-
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history, f, ensure_ascii=False, indent=2)
-
-    return True    
+    """Сохраняет текущие услуги из config.services в SQLite."""
+    for key, service in config.services.items():
+        save_service(key, service)
