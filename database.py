@@ -215,6 +215,7 @@ def delete_service(key):
 
 def load_services():
     """Загружает все услуги с их заменами из SQLite."""
+    init_db()   # Гарантированно создаём таблицы при любой загрузке
     services = {}
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()

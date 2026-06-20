@@ -1058,7 +1058,7 @@ class AddServiceDialog(QDialog):
 
         service_type = "metered" if self.type_combo.currentText() == "По счётчику" else "fixed"
         try:
-            tariff = float(self.tariff_edit.text().strip())
+            tariff = float(normalize_decimal(self.tariff_edit.text().strip()))
             if tariff <= 0:
                 raise ValueError
         except:
@@ -1074,7 +1074,7 @@ class AddServiceDialog(QDialog):
         }
         if service_type == "metered":
             try:
-                start_val = float(self.start_edit.text().strip())
+                start_val = float(normalize_decimal(self.start_edit.text().strip()))
                 if start_val < 0:
                     raise ValueError
                 new_service["start_value"] = start_val
@@ -1159,7 +1159,7 @@ class EditServiceDialog(QDialog):
             return
 
         try:
-            tariff = float(self.tariff_edit.text().strip())
+            tariff = float(normalize_decimal(self.tariff_edit.text().strip()))
             if tariff <= 0:
                 raise ValueError
         except:
@@ -1184,7 +1184,7 @@ class EditServiceDialog(QDialog):
         }
         if self.service["type"] == "metered" and self.start_edit:
             try:
-                start_val = float(self.start_edit.text().strip())
+                start_val = float(normalize_decimal(self.start_edit.text().strip()))
                 if start_val < 0:
                     raise ValueError
                 updated["start_value"] = start_val
