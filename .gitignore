@@ -5,3 +5,4 @@ dist/
 Output/
 *.exe
 *.msi
+help.html
