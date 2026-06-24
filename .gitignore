@@ -6,3 +6,16 @@ Output/
 *.exe
 *.msi
 help.html
+# База данных (уже должна быть)
+communal.db
+*.sqlite
+*.sqlite3
+
+# Исторические данные Excel
+Communal.xlsx
+*.xlsx
+
+# Скрипты импорта и обслуживания БД
+import_excel_to_db.py
+schema.sql
+show_schema.py
