@@ -2,6 +2,7 @@ import sys
 import os
 import traceback
 from database import init_db, save_bill
+from paths import get_db_path
 
 try:
     from PySide6.QtWidgets import (
@@ -25,8 +26,9 @@ try:
         QComboBox,
         QDialogButtonBox,
         QListWidget,
+        QStackedWidget,
     )
-    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect
+    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal
     from PySide6.QtGui import QPixmap, QPainter
     import config
     from communal_calculator import (
@@ -431,6 +433,7 @@ class MainWindow(QMainWindow):
             bg_path = "assets/backgrounds/spring.png"
             effect_path = "assets/effects/clouds.png"
             mode = "clouds"
+
         self.animated_bg = AnimatedBackground(self)
         self.setCentralWidget(self.animated_bg)
         self.animated_bg.set_season_effect(bg_path, effect_path, mode)
@@ -447,14 +450,7 @@ class MainWindow(QMainWindow):
         panel_layout = QVBoxLayout(self.panel)
         panel_layout.setContentsMargins(20, 20, 20, 20)
         panel_layout.setSpacing(15)
-
-        # Центрируем панель на фоне
-        bg_layout = QVBoxLayout(self.animated_bg)
-        bg_layout.addStretch()
-        bg_layout.addWidget(self.panel)
-        bg_layout.setContentsMargins(50, 50, 50, 50)   # отступы со всех сторон по 50 пикселей
-        bg_layout.addStretch()
-
+                
         # Кнопки
         self.settings_button = QPushButton("Настройки")
         self.settings_button.clicked.connect(self.open_settings)
@@ -510,6 +506,242 @@ class MainWindow(QMainWindow):
             self.datetime_label
         )  # Добавляем метку с датой и временем в самый верх главного окна
 
+        # Создаём QStackedWidget, то есть нижняя часть панели с дашбордом
+        self.stacked = QStackedWidget()
+        self.stacked.setStyleSheet("background: transparent;")
+
+        # Дашборд
+        self.dashboard = DashboardWidget()
+        self.stacked.addWidget(self.dashboard)
+
+        # Переключение: кнопка на дашборде переводит на ввод
+        self.dashboard.go_to_input.connect(lambda: self.stacked.setCurrentIndex(1))
+
+        # По умолчанию показываем дашборд
+        self.stacked.setCurrentIndex(0)
+        
+        # Форма ввода (старый MainWindow, но теперь как виджет)
+        self.input_panel = InputPanel()
+        #Добавляем виджет ввода показаний (self.input_panel) в стек, то есть контейнер (self.stacked) (вторая страница, индекс 1)
+        self.stacked.addWidget(self.input_panel)
+        self.input_panel.go_back.connect(
+            lambda: (
+                self.dashboard.update_data(),   # обновляем данные дашборда
+                self.stacked.setCurrentIndex(0) # переключаемся на дашборд (первая траница, индекс 0)
+            )
+        )
+
+        # Добавляем стек в панель
+        panel_layout.addWidget(self.stacked)
+
+        # Размещаем панель на фоне
+        bg_layout = QVBoxLayout(self.animated_bg)
+        bg_layout.setContentsMargins(50, 50, 50, 50)   # отступы со всех сторон по 50 пикселей
+        bg_layout.addWidget(self.panel)
+
+        # Указываем, что panel не растягивается, а stacked занимает всё свободное место
+        bg_layout.setStretchFactor(self.panel, 0)
+        bg_layout.setStretchFactor(self.stacked, 1)
+
+        self.adjustSize()  # Размеры окна автоматически настраиваются под его содержание
+        self.setMinimumSize(500, 400)  # Задаем минимальные размеры окна
+
+    def replace_meter(self, key):
+        dialog = MeterReplacementDialog(key, self)
+        dialog.exec()
+
+    def update_datetime(self):
+        now = QDateTime.currentDateTime()
+        locale = QLocale(QLocale.Russian)
+        # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
+        # Можно изменить под свой вкус
+        datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
+        self.datetime_label.setText(datetime_str)
+
+    def open_settings(self):
+        dialog = SettingsWindow(config.services, refresh_callback=None, parent=self)
+        if dialog.exec() == QDialog.Accepted:
+            self.dashboard.update_data()#Обновление дашборда
+            if hasattr(self, 'input_panel'):
+                self.input_panel.rebuild_services_ui() # обновляем форму ввода
+
+    def open_help(self):
+        import webbrowser
+        import os
+        from PySide6.QtWidgets import QMessageBox
+
+        # Путь к файлу help.html (рядом с программой или в ресурсах)
+        help_path = resource_path("help.html")
+        if os.path.exists(help_path):
+            webbrowser.open(help_path)
+        else:
+            QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+    
+    
+
+class DashboardWidget(QWidget):
+    go_to_input = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(self)
+
+        # Карточки с услугами
+        self.cards_layout = QGridLayout()
+        layout.addLayout(self.cards_layout)
+
+        # График (matplotlib)
+        try:
+            from matplotlib.figure import Figure
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+            self.figure = Figure(figsize=(7, 4), dpi=100)
+            self.canvas = FigureCanvas(self.figure)
+            self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            layout.addWidget(self.canvas)
+        except ImportError:
+            self.canvas = None
+            layout.addWidget(QLabel("Для графиков установите matplotlib"))
+
+        # Кнопка перехода к вводу
+        btn = QPushButton("📝 Ввести показания")
+        # Стиль для обеих кнопок
+        button_style = """
+            QPushButton {
+                background-color: #e0e0e0;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a0a0a0;
+            }
+        """
+        btn.setStyleSheet(button_style)
+        btn.clicked.connect(self.go_to_input.emit)
+        layout.addWidget(btn, alignment=Qt.AlignCenter)
+
+        self.update_data()
+
+    def update_data(self):
+        self.update_cards()
+        self.update_chart()
+
+    def update_cards(self):
+        # Очищаем старые карточки
+        for i in reversed(range(self.cards_layout.count())):
+            widget = self.cards_layout.itemAt(i).widget()
+            if widget:
+                widget.deleteLater()
+
+        # Заголовки
+        self.cards_layout.addWidget(QLabel("<b>Услуга</b>"), 0, 0)
+        self.cards_layout.addWidget(QLabel("<b>Показания</b>"), 0, 1)
+        self.cards_layout.addWidget(QLabel("<b>Тариф</b>"), 0, 2)
+
+        row = 1
+        for key, service in config.services.items():
+            if not service.get("enabled", True):
+                continue
+            name = service["name"]
+            tariff = service.get("tariff", 0.0)
+            start_val = service.get("start_value")
+            if start_val is None:
+                start_val = 0.0
+
+            self.cards_layout.addWidget(QLabel(name), row, 0)
+            self.cards_layout.addWidget(QLabel(f"{start_val:.2f}"), row, 1)
+            self.cards_layout.addWidget(QLabel(f"{tariff:.2f} руб."), row, 2)
+            row += 1
+
+    def update_chart(self):
+        if self.canvas is None:
+            return
+        import sqlite3
+        import pandas as pd
+        conn = sqlite3.connect(get_db_path())
+        query = """
+            SELECT strftime('%m', date) as month, total_with_fee
+            FROM bills
+            WHERE strftime('%Y', date) = strftime('%Y', 'now')
+            ORDER BY date
+        """
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+
+        self.figure.clear()
+        ax = self.figure.add_subplot(111)
+        if not df.empty:
+            ax.plot(df['month'], df['total_with_fee'], marker='o', linestyle='-', color='#2E86C1')
+            ax.set_title("Расходы по месяцам (текущий год)")
+            ax.set_xlabel("Месяц")
+            ax.set_ylabel("Сумма, руб.")
+            ax.grid(True, linestyle='--', alpha=0.6)
+        else:
+            ax.text(0.5, 0.5, "Нет данных за текущий год", ha='center', va='center')
+        self.canvas.draw()
+
+
+class InputPanel(QWidget):
+    go_back = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background: transparent;")
+        #self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        layout = QVBoxLayout(self)
+
+        # Кнопки
+        self.settings_button = QPushButton("Настройки")
+        self.settings_button.clicked.connect(self.open_settings)
+
+        self.help_button = QPushButton("Помощь")
+        self.help_button.clicked.connect(self.open_help)
+
+        # Стиль для обеих кнопок
+        button_style = """
+            QPushButton {
+                background-color: #e0e0e0;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a0a0a0;
+            }
+        """
+        self.settings_button.setStyleSheet(button_style)
+        self.help_button.setStyleSheet(button_style)
+
+        # Горизонтальная упаковка кнопок
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addWidget(self.settings_button)
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(self.help_button)
+
+        # Виджет для отображения даты и времени
+        self.datetime_label = QLabel()
+        self.datetime_label.setAlignment(Qt.AlignCenter)  # выравнивание по центру
+        self.datetime_label.setStyleSheet(
+            "font-size: 12px; margin: 5px;"
+        )  # небольшой отступ
+
+        # Таймер для обновления времени
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_datetime)
+        self.timer.start(1000)  # каждую секунду
+        self.update_datetime()  # сразу установить текущее значение
+
+        # Задаем шрифт, цвет фона метки через setStyleSheet
+        self.datetime_label.setStyleSheet(
+            "background-color: #f0f0f0; padding: 5px; font-size: 12px;"
+        )
         # Контейнер для динамических строк услуг
         self.services_container = (
             QWidget()
@@ -523,13 +755,18 @@ class MainWindow(QMainWindow):
         self.grid_layout.setColumnStretch(1, 0)   # вторая – фиксированной ширины
         self.grid_layout.setColumnStretch(2, 0)   # третья – фиксированной
         self.grid_layout.setColumnStretch(3, 0)   # для кнопки действия
-        panel_layout.addWidget(self.services_container)
+        layout.addWidget(self.services_container)
 
         # Кнопка "Рассчитать"
         calc_button = QPushButton("Рассчитать")
-        calc_button.setFixedWidth(200)
-        calc_button.setFixedHeight(40)
-        calc_button.setStyleSheet("""
+        calc_button.clicked.connect(self.calculate)
+
+        #Кнопка "Назад"
+        back_button = QPushButton("Назад")
+        back_button.clicked.connect(self.go_back.emit)
+        
+        #Стили для кнопок "Рассчитать" и "Назад"
+        Calc_and_back_button_style = """
             QPushButton {
                 background-color: lightblue;
                 font: bold 12px;
@@ -543,13 +780,20 @@ class MainWindow(QMainWindow):
             QPushButton:pressed {
                 background-color: #4682b4;
             }
-        """)
-        calc_button.clicked.connect(self.calculate)
-        panel_layout.addWidget(
-            calc_button, alignment=Qt.AlignCenter
-        )  # Устанавливаем выравнивание по центру
-        calc_button.setObjectName("calculateButton")  # даём уникальное имя
+        """
+        #Задаем стили кнопкам "Рассчитать" и "Назад"
+        calc_button.setStyleSheet(Calc_and_back_button_style)
+        back_button.setStyleSheet(Calc_and_back_button_style)
 
+        # Горизонтальная упаковка кнопок "Рассчитать" и "Назад"
+        Calc_and_back_button_layout = QHBoxLayout()
+        Calc_and_back_button_layout.addWidget(calc_button)
+        Calc_and_back_button_layout.addStretch()
+        Calc_and_back_button_layout.addWidget(back_button)
+
+        # Добавляем этот layout в основной layout вместо отдельной кнопки
+        layout.addLayout(Calc_and_back_button_layout)
+        
         # Словари для хранения виджетов
         self.entries = {}
         self.checkboxes = {}
@@ -654,6 +898,7 @@ class MainWindow(QMainWindow):
                     return
                 # Комиссия не задана – открываем диалог
                 dialog = QDialog(self)
+                dialog.setStyleSheet("background-color: white;")#Прописываем белый фон окна (так как по умолчанию он черный)
                 dialog.setWindowTitle("Настройка комиссии банка")
                 dialog.setMinimumWidth(300)
                 layout = QVBoxLayout(dialog)
@@ -714,22 +959,14 @@ class MainWindow(QMainWindow):
             self.grid_layout.setColumnStretch(0, 1)  # первая колонка растягивается
             self.grid_layout.setColumnStretch(1, 0)  # вторая – фиксированной ширины
             self.grid_layout.setColumnStretch(2, 0)  # третья – фиксированной ширины
-
-        # Показать подсказку с начальными показаниями (если есть услуги)
-        if config.services:
-            msg_lines = ["В прошлом месяце показания ваших счётчиков были:"]
-            for key, service in config.services.items():
-                if service.get("type") == "metered" and service.get("enabled"):
-                    start_val = service.get('start_value', 0)
-                    replacements = service.get('replacements', [])
-                    if replacements:
-                        msg_lines.append(f"{service['name']}: {start_val} (после замены счётчика)")
-                    else:
-                        msg_lines.append(f"{service['name']}: {start_val}")
-            msg = "\n".join(msg_lines) + "\n\nВведите новые показания и нажмите 'Рассчитать'"
-            QMessageBox.information(self, "Информация", msg)
         
+        # Добавляем растягивающуюся пустую строку
+        self.grid_layout.setRowStretch(row, 1)
+        # Для всех предыдущих строк (с услугами) устанавливаем растяжение 0
+        for r in range(1, row):
+            self.grid_layout.setRowStretch(r, 0)
         self.adjustSize()  # Размеры окна автоматически настраиваются под его содержание
+        #self.setFixedHeight(self.sizeHint().height())
         self.setMinimumSize(500, 400)  # Задаем минимальные размеры окна
 
     def replace_meter(self, key):
@@ -775,7 +1012,6 @@ class MainWindow(QMainWindow):
     config.services, save_services, used_replacement_ids  # ← передаём
 )
         self.result_window.show()
-
 
 class ResultWindow(QDialog):
     def __init__(self, results_data, current_readings, costs, 
@@ -1202,6 +1438,7 @@ class EditServiceDialog(QDialog):
 class MeterReplacementDialog(QDialog):
     def __init__(self, service_key, parent=None):
         super().__init__(parent)
+        self.setStyleSheet("background-color: white;")#Прописываем белый фон окна (так как по умолчанию он черный)
         self.service_key = service_key
         self.setWindowTitle("Замена счётчика")
         self.setMinimumWidth(300)
