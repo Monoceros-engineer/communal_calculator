@@ -3,6 +3,7 @@ import os
 import traceback
 from database import init_db, save_bill
 from paths import get_db_path
+from statistics import StatisticsWindow
 
 try:
     from PySide6.QtWidgets import (
@@ -531,6 +532,8 @@ class MainWindow(QMainWindow):
             )
         )
 
+        self.dashboard.open_stats.connect(self.open_statistics)
+
         # Добавляем стек в панель
         panel_layout.addWidget(self.stacked)
 
@@ -576,11 +579,16 @@ class MainWindow(QMainWindow):
             webbrowser.open(help_path)
         else:
             QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+
+    def open_statistics(self):
+        dialog = StatisticsWindow(self)
+        dialog.exec()
     
     
 
 class DashboardWidget(QWidget):
     go_to_input = Signal()
+    open_stats = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -604,7 +612,11 @@ class DashboardWidget(QWidget):
             layout.addWidget(QLabel("Для графиков установите matplotlib"))
 
         # Кнопка перехода к вводу
-        btn = QPushButton("📝 Ввести показания")
+        enter_btn = QPushButton("📝 Ввести показания")
+
+        # Кнопка статистики
+        stat_btn = QPushButton("Статистика")
+
         # Стиль для обеих кнопок
         button_style = """
             QPushButton {
@@ -620,9 +632,26 @@ class DashboardWidget(QWidget):
                 background-color: #a0a0a0;
             }
         """
-        btn.setStyleSheet(button_style)
-        btn.clicked.connect(self.go_to_input.emit)
-        layout.addWidget(btn, alignment=Qt.AlignCenter)
+        #Применяем стили для кнопок
+        enter_btn.setStyleSheet(button_style)
+        stat_btn.setStyleSheet(button_style)
+        enter_btn.clicked.connect(self.go_to_input.emit)
+        stat_btn.clicked.connect(self.open_stats.emit)
+        
+        # Горизонтальный layout для кнопок
+        button_layout = QHBoxLayout()
+
+        # Кнопка "Ввести показания" (слева)
+        button_layout.addWidget(enter_btn)
+
+        # Растяжка, которая раздвигает кнопки
+        button_layout.addStretch()
+
+        # Кнопка "Статистика" (справа)
+        button_layout.addWidget(stat_btn)
+
+        # Добавляем этот layout в основной layout
+        layout.addLayout(button_layout)
 
         self.update_data()
 
