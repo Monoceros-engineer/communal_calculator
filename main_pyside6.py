@@ -784,6 +784,7 @@ class InputPanel(QWidget):
         self.grid_layout.setColumnStretch(1, 0)   # вторая – фиксированной ширины
         self.grid_layout.setColumnStretch(2, 0)   # третья – фиксированной
         self.grid_layout.setColumnStretch(3, 0)   # для кнопки действия
+        self.grid_layout.setColumnStretch(4, 0)   # для кнопки реквизитов
         layout.addWidget(self.services_container)
 
         # Кнопка "Рассчитать"
@@ -880,6 +881,9 @@ class InputPanel(QWidget):
         self.grid_layout.addWidget(header_comm, 0, 2)
         header_actions = QLabel("<b>Действия</b>")
         self.grid_layout.addWidget(header_actions, 0, 3)
+        # Устанавливаем выравнивание по центру горизонтально и вертикально
+        header_info = QLabel("<b>Информация</b>")
+        self.grid_layout.addWidget(header_info, 0, 4)
 
         row = 1
         # Проходим по всем услугам из config
@@ -982,6 +986,26 @@ class InputPanel(QWidget):
             else:
                 self.grid_layout.addWidget(QLabel(""), row, 3)   # пустое место для выравнивания
 
+            # Кнопки реквизитов
+            provider_btn = QPushButton("🏦 Реквизиты")
+            provider_btn.setFixedWidth(130)
+            provider_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+            provider_btn.clicked.connect(lambda checked, k=key: self.show_provider_info(k))
+            self.grid_layout.addWidget(provider_btn, row, 4, alignment=Qt.AlignCenter)
+
             row += 1
 
             # # Настраиваем растяжение колонок
@@ -1001,6 +1025,36 @@ class InputPanel(QWidget):
     def replace_meter(self, key):
         dialog = MeterReplacementDialog(key, self)
         dialog.exec()
+
+    def show_provider_info(self, service_key):
+        from database import get_provider, set_service_provider
+        from config import services
+
+        service = services.get(service_key)
+        if not service:
+            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            return
+
+        provider_id = service.get('provider_id')
+        if provider_id:
+            provider = get_provider(provider_id)
+            if provider:
+                dialog = ProviderInfoDialog(provider, self)
+                dialog.exec()
+                return
+            else:
+                # Если provider_id есть, но данных нет – сбрасываем
+                set_service_provider(service_key, None)
+                service['provider_id'] = None
+
+        # Если реквизитов нет – открываем диалог создания
+        dialog = EditProviderDialog(service_key, None, self)
+        if dialog.exec():
+            # После сохранения обновляем интерфейс (чтобы отобразилась кнопка или изменилось состояние)
+            self.rebuild_services_ui()
+            # Также обновим дашборд, если он открыт
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
     
     def calculate(self):
         readings = {key: entry.text() for key, entry in self.entries.items()}
@@ -1803,6 +1857,99 @@ class SettingsWindow(QDialog):
 
         self.accept()  # закрываем диалог
 
+class ProviderInfoDialog(QDialog):
+    def __init__(self, provider_data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Реквизиты организации")
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        fields = [
+            ("Организация", provider_data.get('name', '')),
+            ("ИНН", provider_data.get('inn', '')),
+            ("Расчётный счёт", provider_data.get('account', '')),
+            ("Банк", provider_data.get('bank', '')),
+            ("БИК", provider_data.get('bik', '')),
+            ("Назначение платежа", provider_data.get('payment_purpose', ''))
+        ]
+        for label, value in fields:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(f"<b>{label}:</b>"))
+            row.addWidget(QLabel(value))
+            layout.addLayout(row)
+
+        close_btn = QPushButton("Закрыть")
+        close_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn, alignment=Qt.AlignCenter)
+
+
+class EditProviderDialog(QDialog):
+    def __init__(self, service_key, provider_data=None, parent=None):
+        super().__init__(parent)
+        self.service_key = service_key
+        self.provider_data = provider_data or {}
+        self.setWindowTitle("Редактирование реквизитов" if provider_data else "Добавление реквизитов")
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: white;")
+
+        layout = QVBoxLayout(self)
+
+        fields = [
+            ("Название организации", 'name'),
+            ("ИНН", 'inn'),
+            ("Расчётный счёт", 'account'),
+            ("Банк", 'bank'),
+            ("БИК", 'bik'),
+            ("Назначение платежа", 'payment_purpose')
+        ]
+        self.inputs = {}
+        for label, key in fields:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label + ":"))
+            edit = QLineEdit()
+            edit.setText(self.provider_data.get(key, ''))
+            row.addWidget(edit)
+            layout.addLayout(row)
+            self.inputs[key] = edit
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+    def get_data(self):
+        data = {}
+        for key, edit in self.inputs.items():
+            data[key] = edit.text().strip()
+        if self.provider_data.get('id'):
+            data['id'] = self.provider_data['id']
+        return data
+
+    def accept(self):
+        from database import save_provider, set_service_provider
+        data = self.get_data()
+        if not data.get('name'):
+            QMessageBox.warning(self, "Ошибка", "Название организации обязательно")
+            return
+        provider_id = save_provider(data)
+        if self.service_key:
+            set_service_provider(self.service_key, provider_id)
+        super().accept()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

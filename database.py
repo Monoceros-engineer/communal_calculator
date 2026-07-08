@@ -20,7 +20,9 @@ def init_db():
                 enabled INTEGER NOT NULL DEFAULT 1,
                 tariff REAL NOT NULL,
                 fee REAL NOT NULL DEFAULT 0,
-                start_value REAL
+                start_value REAL,
+                provider_id INTEGER,
+                FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
             )
         """)
         
@@ -77,9 +79,23 @@ def init_db():
                 PRIMARY KEY (bill_id, replacement_id)
             )
         """)
+
+        # Таблица организаций (реквизиты)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS providers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                inn TEXT,
+                account TEXT,
+                bank TEXT,
+                bik TEXT,
+                payment_purpose TEXT
+            )
+        """)
         
         conn.commit()
 
+# ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
 def save_bill(bill_data):
     """
     Сохраняет результаты расчёта в БД.
@@ -186,7 +202,7 @@ def migrate_from_json():
         }
     pass
 
-# ===== УСЛУГИ =====
+# ===== ФУНКЦИИ ДЛЯ РАБОТЫ С УСЛУГАМИ =====
 
 def save_service(key, service):
     """Сохраняет услугу в таблицу services (вставка или обновление)."""
@@ -318,4 +334,56 @@ def mark_replacements_paid(rep_ids, bill_id):
         # Связываем с bill
         for rep_id in rep_ids:
             cursor.execute("INSERT OR IGNORE INTO bill_replacements (bill_id, replacement_id) VALUES (?, ?)", (bill_id, rep_id))
+        conn.commit()
+
+# ===== ФУНКЦИИ ДЛЯ РАБОТЫ С ПРОВАЙДЕРАМИ =====
+def save_provider(data):
+    """Сохраняет организацию (вставка или обновление)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        if 'id' in data and data['id']:
+            cursor.execute("""
+                UPDATE providers SET name=?, inn=?, account=?, bank=?, bik=?, payment_purpose=?
+                WHERE id=?
+            """, (data['name'], data.get('inn'), data.get('account'), data.get('bank'),
+                 data.get('bik'), data.get('payment_purpose'), data['id']))
+        else:
+            cursor.execute("""
+                INSERT INTO providers (name, inn, account, bank, bik, payment_purpose)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (data['name'], data.get('inn'), data.get('account'), data.get('bank'),
+                 data.get('bik'), data.get('payment_purpose')))
+        conn.commit()
+        return cursor.lastrowid if not data.get('id') else data['id']
+
+def get_provider(provider_id):
+    """Возвращает данные организации по id."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, inn, account, bank, bik, payment_purpose FROM providers WHERE id=?", (provider_id,))
+        row = cursor.fetchone()
+        if row:
+            return {'id': row[0], 'name': row[1], 'inn': row[2], 'account': row[3],
+                    'bank': row[4], 'bik': row[5], 'payment_purpose': row[6]}
+        return None
+
+def get_all_providers():
+    """Возвращает список всех организаций."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name FROM providers ORDER BY name")
+        return [{'id': row[0], 'name': row[1]} for row in cursor.fetchall()]
+
+def delete_provider(provider_id):
+    """Удаляет организацию."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM providers WHERE id=?", (provider_id,))
+        conn.commit()
+
+def set_service_provider(service_key, provider_id):
+    """Привязывает организацию к услуге."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE services SET provider_id=? WHERE key=?", (provider_id, service_key))
         conn.commit()
