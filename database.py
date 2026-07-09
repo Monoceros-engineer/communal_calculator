@@ -86,10 +86,16 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 inn TEXT,
+                kpp TEXT,
                 account TEXT,
                 bank TEXT,
                 bik TEXT,
-                payment_purpose TEXT
+                corr_account TEXT,
+                personal_account TEXT,
+                payment_purpose TEXT,
+                payment_identifier TEXT,
+                extra_info TEXT,
+                address TEXT
             )
         """)
         
@@ -209,8 +215,8 @@ def save_service(key, service):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO services (key, name, type, enabled, tariff, fee, start_value)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO services (key, name, type, enabled, tariff, fee, start_value, provider_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             key,
             service['name'],
@@ -218,7 +224,8 @@ def save_service(key, service):
             1 if service.get('enabled', True) else 0,
             service['tariff'],
             service.get('fee', 0.0),
-            service.get('start_value')
+            service.get('start_value'),
+            service.get('provider_id')   
         ))
         conn.commit()
 
@@ -236,10 +243,10 @@ def load_services():
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         # Загружаем услуги
-        cursor.execute("SELECT id, key, name, type, enabled, tariff, fee, start_value FROM services")
+        cursor.execute("SELECT id, key, name, type, enabled, tariff, fee, start_value, provider_id FROM services")
         rows = cursor.fetchall()
         for row in rows:
-            id_, key, name, type_, enabled, tariff, fee, start_value = row
+            id_, key, name, type_, enabled, tariff, fee, start_value, provider_id = row
             services[key] = {
                 'id': id_,
                 'name': name,
@@ -248,7 +255,8 @@ def load_services():
                 'tariff': tariff,
                 'fee': fee,
                 'start_value': start_value,
-                'replacements': []   # заполним позже
+                'provider_id': provider_id,  
+                'replacements': []
             }
 
         # Загружаем замены для всех услуг
@@ -343,16 +351,18 @@ def save_provider(data):
         cursor = conn.cursor()
         if 'id' in data and data['id']:
             cursor.execute("""
-                UPDATE providers SET name=?, inn=?, account=?, bank=?, bik=?, payment_purpose=?
+                UPDATE providers SET name=?, inn=?, kpp=?, account=?, bank=?, bik=?, corr_account=?, personal_account=?, payment_purpose=?, payment_identifier=?, address=?, extra_info=?
                 WHERE id=?
-            """, (data['name'], data.get('inn'), data.get('account'), data.get('bank'),
-                 data.get('bik'), data.get('payment_purpose'), data['id']))
+            """, (data['name'], data.get('inn'), data.get('kpp'), data.get('account'), data.get('bank'),
+                data.get('bik'), data.get('corr_account'), data.get('personal_account'),
+                data.get('payment_purpose'), data.get('payment_identifier'), data.get('address'), data.get('extra_info'), data['id']))
         else:
             cursor.execute("""
-                INSERT INTO providers (name, inn, account, bank, bik, payment_purpose)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (data['name'], data.get('inn'), data.get('account'), data.get('bank'),
-                 data.get('bik'), data.get('payment_purpose')))
+                INSERT INTO providers (name, inn, kpp, account, bank, bik, corr_account, personal_account, payment_purpose, payment_identifier, address, extra_info)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (data['name'], data.get('inn'), data.get('kpp'), data.get('account'), data.get('bank'),
+                data.get('bik'), data.get('corr_account'), data.get('personal_account'),
+                data.get('payment_purpose'), data.get('payment_identifier'), data.get('address'), data.get('extra_info')))
         conn.commit()
         return cursor.lastrowid if not data.get('id') else data['id']
 
@@ -360,11 +370,27 @@ def get_provider(provider_id):
     """Возвращает данные организации по id."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, inn, account, bank, bik, payment_purpose FROM providers WHERE id=?", (provider_id,))
+        cursor.execute("""
+    SELECT id, name, inn, kpp, account, bank, bik, corr_account, personal_account, payment_purpose, payment_identifier, address, extra_info
+    FROM providers WHERE id=?
+    """, (provider_id,))
         row = cursor.fetchone()
         if row:
-            return {'id': row[0], 'name': row[1], 'inn': row[2], 'account': row[3],
-                    'bank': row[4], 'bik': row[5], 'payment_purpose': row[6]}
+            return {
+                'id': row[0],
+                'name': row[1],
+                'inn': row[2],
+                'kpp': row[3],
+                'account': row[4],
+                'bank': row[5],
+                'bik': row[6],
+                'corr_account': row[7],
+                'personal_account': row[8],
+                'payment_purpose': row[9],
+                'payment_identifier': row[10],
+                'address': row[11],
+                'extra_info': row[12]
+            }
         return None
 
 def get_all_providers():

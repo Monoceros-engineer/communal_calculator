@@ -1029,8 +1029,18 @@ class InputPanel(QWidget):
     def show_provider_info(self, service_key):
         from database import get_provider, set_service_provider
         from config import services
+        from file_manager import load_settings
 
+        # --- ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА ---
+        load_settings()   # всегда загружаем свежие данные из БД
+
+        # --- ОТЛАДКА (временная) ---
+        print(f"=== show_provider_info для {service_key} ===")
         service = services.get(service_key)
+        if service:
+            print(f"  provider_id в config: {service.get('provider_id')}")
+        else:
+            print("  Услуга не найдена в config")
         if not service:
             QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
             return
@@ -1051,6 +1061,7 @@ class InputPanel(QWidget):
         dialog = EditProviderDialog(service_key, None, self)
         if dialog.exec():
             # После сохранения обновляем интерфейс (чтобы отобразилась кнопка или изменилось состояние)
+            load_settings()   # <-- перезагружаем услуги из БД
             self.rebuild_services_ui()
             # Также обновим дашборд, если он открыт
             if self.parent() and hasattr(self.parent(), 'dashboard'):
@@ -1868,10 +1879,16 @@ class ProviderInfoDialog(QDialog):
         fields = [
             ("Организация", provider_data.get('name', '')),
             ("ИНН", provider_data.get('inn', '')),
+            ("КПП", provider_data.get('kpp', '')),
             ("Расчётный счёт", provider_data.get('account', '')),
             ("Банк", provider_data.get('bank', '')),
             ("БИК", provider_data.get('bik', '')),
-            ("Назначение платежа", provider_data.get('payment_purpose', ''))
+            ("Корреспондентский счёт", provider_data.get('corr_account', '')),
+            ("Лицевой счёт", provider_data.get('personal_account', '')),
+            ("Назначение платежа", provider_data.get('payment_purpose', '')),
+            ("Идентификатор платежа", provider_data.get('payment_identifier', '')),
+            ("Адрес", provider_data.get('address', '')),
+            ("Дополнительная информация", provider_data.get('extra_info', ''))
         ]
         for label, value in fields:
             row = QHBoxLayout()
@@ -1912,10 +1929,17 @@ class EditProviderDialog(QDialog):
         fields = [
             ("Название организации", 'name'),
             ("ИНН", 'inn'),
+            ("КПП", 'kpp'),
             ("Расчётный счёт", 'account'),
             ("Банк", 'bank'),
             ("БИК", 'bik'),
-            ("Назначение платежа", 'payment_purpose')
+            ("Корреспондентский счёт", 'corr_account'),
+            ("Лицевой счёт", 'personal_account'),
+            ("Назначение платежа", 'payment_purpose'),
+            ("Идентификатор платежа", 'payment_identifier'),
+            ("Адрес", 'address'),
+            ("Дополнительная информация", 'extra_info')
+
         ]
         self.inputs = {}
         for label, key in fields:
@@ -1945,7 +1969,7 @@ class EditProviderDialog(QDialog):
         data = self.get_data()
         if not data.get('name'):
             QMessageBox.warning(self, "Ошибка", "Название организации обязательно")
-            return
+            return  # <-- если здесь return, диалог не закрывается
         provider_id = save_provider(data)
         if self.service_key:
             set_service_provider(self.service_key, provider_id)
