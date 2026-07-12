@@ -1615,6 +1615,11 @@ class SettingsWindow(QDialog):
         self.tab_widget.addTab(self.commissions_tab, "Изменить комиссию")
         self.setup_commissions_tab()
 
+        #Вкладка "Реквизиты"
+        self.providers_tab = QWidget()
+        self.tab_widget.addTab(self.providers_tab, "Реквизиты")
+        self.setup_providers_tab()
+
         # Кнопки диалога
         button_box = QDialogButtonBox()
         save_btn = button_box.addButton("Сохранить", QDialogButtonBox.AcceptRole)
@@ -1761,6 +1766,167 @@ class SettingsWindow(QDialog):
         self.btn_edit.setEnabled(has_selection)
         self.btn_delete.setEnabled(has_selection)
         self.btn_toggle.setEnabled(has_selection)
+
+    def setup_providers_tab(self):
+        """Создаёт интерфейс вкладки Реквизиты"""
+        layout = QVBoxLayout(self.providers_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        # Таблица провайдеров
+        self.providers_table = QTableWidget()
+        self.providers_table.setColumnCount(5)
+        self.providers_table.setHorizontalHeaderLabels(["ID", "Название", "ИНН", "Банк", "Привязанная услуга"])
+        self.providers_table.hideColumn(0)  # скрываем ID
+        self.providers_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.providers_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.providers_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.providers_table)
+
+        # Кнопки управления
+        btn_layout = QHBoxLayout()
+        self.btn_add_provider = QPushButton("Добавить")
+        self.btn_edit_provider = QPushButton("Редактировать")
+        self.btn_delete_provider = QPushButton("Удалить")
+        self.btn_attach_provider = QPushButton("Привязать к услуге")
+
+        for btn in (self.btn_add_provider, self.btn_edit_provider, self.btn_delete_provider, self.btn_attach_provider):
+            btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+
+        btn_layout.addWidget(self.btn_add_provider)
+        btn_layout.addWidget(self.btn_edit_provider)
+        btn_layout.addWidget(self.btn_delete_provider)
+        btn_layout.addWidget(self.btn_attach_provider)
+        layout.addLayout(btn_layout)
+
+        # Подключение сигналов
+        self.btn_add_provider.clicked.connect(self.add_provider)
+        self.btn_edit_provider.clicked.connect(self.edit_provider)
+        self.btn_delete_provider.clicked.connect(self.delete_provider)
+        self.btn_attach_provider.clicked.connect(self.attach_provider)
+
+        # Заполнение таблицы
+        self.refresh_providers_table()
+
+    def refresh_providers_table(self):
+        """Загружает данные по реквизитам из БД"""
+        from database import get_all_providers, get_provider
+        from config import services
+
+        providers = get_all_providers()
+        self.providers_table.setRowCount(len(providers))
+
+        # Сопоставляем provider_id с названиями услуг
+        service_by_provider = {}
+        for key, service in services.items():
+            if service.get('provider_id'):
+                service_by_provider[service['provider_id']] = service['name']
+
+        for i, p in enumerate(providers):
+            provider = get_provider(p['id'])
+            if not provider:
+                continue
+            self.providers_table.setItem(i, 0, QTableWidgetItem(str(provider['id'])))
+            self.providers_table.setItem(i, 1, QTableWidgetItem(provider.get('name', '')))
+            self.providers_table.setItem(i, 2, QTableWidgetItem(provider.get('inn', '')))
+            self.providers_table.setItem(i, 3, QTableWidgetItem(provider.get('bank', '')))
+            attached = service_by_provider.get(provider['id'], 'Не привязана')
+            self.providers_table.setItem(i, 4, QTableWidgetItem(attached))
+
+        self.providers_table.resizeColumnsToContents()
+
+    def add_provider(self):
+        """Добавить – открывает EditProviderDialog без service_key (только создание провайдера)"""
+        dialog = EditProviderDialog(None, None, self)  # service_key=None, provider_data=None
+        if dialog.exec():
+            self.refresh_providers_table()
+            if self.refresh_callback:
+                self.refresh_callback()  # обновить главное окно
+
+    def edit_provider(self):
+        """Редактировать – берёт выбранную строку, загружает данные провайдера и открывает EditProviderDialog с provider_data"""
+        selected = self.providers_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Ошибка", "Выберите организацию")
+            return
+        row = selected[0].row()
+        provider_id = int(self.providers_table.item(row, 0).text())
+        from database import get_provider
+        provider = get_provider(provider_id)
+        if not provider:
+            QMessageBox.warning(self, "Ошибка", "Данные не найдены")
+            return
+        dialog = EditProviderDialog(None, provider, self)  # service_key=None, provider_data=provider
+        if dialog.exec():
+            self.refresh_providers_table()
+            if self.refresh_callback:
+                self.refresh_callback()
+
+    def delete_provider(self):
+        """Удалить – подтверждение и удаление провайдера"""
+        selected = self.providers_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Ошибка", "Выберите организацию")
+            return
+        row = selected[0].row()
+        provider_id = int(self.providers_table.item(row, 0).text())
+        confirm = QMessageBox.question(self, "Удаление", "Удалить организацию?", QMessageBox.Yes | QMessageBox.No)
+        if confirm == QMessageBox.Yes:
+            from database import delete_provider
+            delete_provider(provider_id)
+            self.refresh_providers_table()
+            if self.refresh_callback:
+                self.refresh_callback()
+
+    def attach_provider(self):
+        """Привязать к услуге – выбор услуги из списка и привязка к ней провайдера"""
+        selected = self.providers_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Ошибка", "Выберите организацию")
+            return
+        row = selected[0].row()
+        provider_id = int(self.providers_table.item(row, 0).text())
+        from config import services
+
+        # Список услуг без привязки
+        available = [key for key, s in services.items() if s.get('enabled', True) and not s.get('provider_id')]
+        if not available:
+            QMessageBox.information(self, "Информация", "Нет свободных услуг для привязки")
+            return
+
+        # Диалог выбора
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Привязка к услуге")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Выберите услугу:"))
+        combo = QComboBox()
+        for key in available:
+            combo.addItem(services[key]['name'], key)
+        layout.addWidget(combo)
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(dialog.accept)
+        btn_box.rejected.connect(dialog.reject)
+        layout.addWidget(btn_box)
+
+        if dialog.exec():
+            service_key = combo.currentData()
+            from database import set_service_provider
+            set_service_provider(service_key, provider_id)
+            self.refresh_providers_table()
+            if self.refresh_callback:
+                self.refresh_callback()
 
     def add_service(self):
         dialog = AddServiceDialog(self.services, self)
