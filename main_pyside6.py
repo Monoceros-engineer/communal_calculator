@@ -1034,13 +1034,8 @@ class InputPanel(QWidget):
         # --- ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА ---
         load_settings()   # всегда загружаем свежие данные из БД
 
-        # --- ОТЛАДКА (временная) ---
-        print(f"=== show_provider_info для {service_key} ===")
         service = services.get(service_key)
-        if service:
-            print(f"  provider_id в config: {service.get('provider_id')}")
-        else:
-            print("  Услуга не найдена в config")
+
         if not service:
             QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
             return
@@ -1637,7 +1632,7 @@ class SettingsWindow(QDialog):
 
         # После создания всех виджетов подгоняем размер окна
         self.adjustSize()
-        self.setMinimumSize(500, 400)  # чтобы окно не было слишком маленьким
+        self.setMinimumSize(530, 400)  # чтобы окно не было слишком маленьким
         
     def setup_tariffs_tab(self):
         """Создаёт таблицу для редактирования тарифов."""
@@ -2059,7 +2054,19 @@ class ProviderInfoDialog(QDialog):
         for label, value in fields:
             row = QHBoxLayout()
             row.addWidget(QLabel(f"<b>{label}:</b>"))
-            row.addWidget(QLabel(value))
+            # Вместо QLabel используем QLineEdit с readOnly и без рамки
+            edit = QLineEdit(value)
+            edit.setReadOnly(True)
+            edit.setStyleSheet("""
+                QLineEdit {
+                    border: none;
+                    background: transparent;
+                    font-size: 12px;
+                }
+            """)
+            # Чтобы курсор был виден (для выделения) – разрешаем
+            edit.setCursor(Qt.IBeamCursor)
+            row.addWidget(edit)
             layout.addLayout(row)
 
         close_btn = QPushButton("Закрыть")
@@ -2120,6 +2127,28 @@ class EditProviderDialog(QDialog):
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        # --- Меняем названия кнопок ---
+        ok_btn = button_box.button(QDialogButtonBox.Ok)
+        if ok_btn:
+            ok_btn.setText("Сохранить")
+
+        cancel_btn = button_box.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(button_box)
 
     def get_data(self):
