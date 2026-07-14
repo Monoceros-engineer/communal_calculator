@@ -8,7 +8,7 @@ if sys.platform == 'win32':
 build_options = {
     'include_files': [
         'icon.ico', 'icon.png', 'calculator.py', 'communal_calculator.py', 'config.py',
-        'file_manager.py', 'main_pyside6.py', 'readme.md', 'help.html', 'paths.py',
+        'file_manager.py', 'main_pyside6.py', 'readme.md', 'help.html', 'paths.py', stats_window.py,
         'assets'
     ],
     'packages': ['PySide6', 'shiboken6', 'tkinter', 'decimal', 'json', 'datetime', 'webbrowser', 'tempfile', 'os', 'sys'],

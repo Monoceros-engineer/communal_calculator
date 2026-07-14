@@ -3,7 +3,7 @@ import os
 import traceback
 from database import init_db, save_bill
 from paths import get_db_path
-from statistics import StatisticsWindow
+from stats_window import StatisticsWindow
 
 try:
     from PySide6.QtWidgets import (
