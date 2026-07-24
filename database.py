@@ -237,12 +237,13 @@ def delete_service(key):
         conn.commit()
 
 def load_services():
-    """Загружает все услуги с их заменами из SQLite."""
-    init_db()   # Гарантированно создаём таблицы при любой загрузке
+    """Загружает все услуги с их заменами и завершёнными поверками из SQLite."""
+    init_db()
     services = {}
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        # Загружаем услуги
+
+        # --- Загружаем услуги ---
         cursor.execute("SELECT id, key, name, type, enabled, tariff, fee, start_value, provider_id FROM services")
         rows = cursor.fetchall()
         for row in rows:
@@ -255,14 +256,14 @@ def load_services():
                 'tariff': tariff,
                 'fee': fee,
                 'start_value': start_value,
-                'provider_id': provider_id,  
-                'replacements': []
+                'provider_id': provider_id,
+                'replacements': [],
+                'last_completed_verification': None   # ← добавляем поле
             }
 
-        # Загружаем замены для всех услуг
+        # --- Загружаем замены ---
         cursor.execute("SELECT id, service_id, old_final, new_start, date, is_paid FROM meter_replacements")
         replacements_rows = cursor.fetchall()
-        # Создаём словарь service_id -> key, чтобы связать замены с услугами
         cursor.execute("SELECT id, key FROM services")
         id_to_key = {row[0]: row[1] for row in cursor.fetchall()}
 
@@ -270,12 +271,35 @@ def load_services():
             key = id_to_key.get(service_id)
             if key and key in services:
                 services[key]['replacements'].append({
-                    'id': rep_id,                        # ← добавляем ID
+                    'id': rep_id,
                     'old_final': old_final,
                     'new_start': new_start,
                     'date': date,
                     'is_paid': bool(is_paid)
                 })
+
+        # --- Загружаем завершённые поверки (is_active = 0) ---
+        cursor.execute("""
+            SELECT service_id, id, old_final, new_start, date_start, date_end,
+                   amount_norm, next_verification_date, is_paid
+            FROM meter_replacements
+            WHERE type = 'verification' AND is_active = 0
+        """)
+        verif_rows = cursor.fetchall()
+        for row in verif_rows:
+            service_id, verif_id, old_final, new_start, date_start, date_end, amount_norm, next_verif_date, is_paid = row
+            key = id_to_key.get(service_id)
+            if key and key in services:
+                services[key]['last_completed_verification'] = {
+                    'id': verif_id,
+                    'old_final': old_final,
+                    'new_start': new_start,
+                    'date_start': date_start,
+                    'date_end': date_end,
+                    'amount_norm': amount_norm,
+                    'next_verification_date': next_verif_date,
+                    'is_paid': bool(is_paid)
+                }
 
     return services
 
@@ -412,4 +436,152 @@ def set_service_provider(service_key, provider_id):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("UPDATE services SET provider_id=? WHERE key=?", (provider_id, service_key))
+        conn.commit()
+
+# ===== ПОВЕРКИ (новая логика на основе meter_replacements) =====
+
+def add_verification(service_id, data):
+    """
+    Создаёт запись о поверке в таблице meter_replacements.
+    data: dict с полями old_final, new_start, date_start, date_end,
+          amount_norm, next_verification_date
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO meter_replacements (
+                service_id, old_final, new_start, date_start, date_end,
+                amount_norm, next_verification_date, is_active, type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            service_id,
+            data.get('old_final'),
+            data.get('new_start'),
+            data.get('date_start'),
+            data.get('date_end'),
+            data.get('amount_norm'),
+            data.get('next_verification_date'),
+            1 if not data.get('date_end') else 0,
+            'verification'
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+def update_verification(verification_id, data):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE meter_replacements
+            SET old_final = ?, new_start = ?, date_start = ?, date_end = ?,
+                amount_norm = ?, next_verification_date = ?, is_active = ?
+            WHERE id = ?
+        """, (
+            data.get('old_final'),
+            data.get('new_start'),
+            data.get('date_start'),
+            data.get('date_end'),
+            data.get('amount_norm'),
+            data.get('next_verification_date'),
+            1 if not data.get('date_end') else 0,
+            verification_id
+        ))
+        conn.commit()
+
+def get_active_verification(service_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, old_final, new_start, date_start, date_end, amount_norm, next_verification_date
+            FROM meter_replacements
+            WHERE service_id = ? AND type = 'verification' AND is_active = 1
+            ORDER BY date_start DESC LIMIT 1
+        """, (service_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'old_final': row[1],
+                'new_start': row[2],
+                'date_start': row[3],
+                'date_end': row[4],
+                'amount_norm': row[5],
+                'next_verification_date': row[6]
+            }
+        return None
+
+def get_last_completed_verification(service_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, old_final, new_start, date_start, date_end, amount_norm, next_verification_date
+            FROM meter_replacements
+            WHERE service_id = ? AND type = 'verification' AND is_active = 0
+            ORDER BY date_start DESC LIMIT 1
+        """, (service_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'old_final': row[1],
+                'new_start': row[2],
+                'date_start': row[3],
+                'date_end': row[4],
+                'amount_norm': row[5],
+                'next_verification_date': row[6]
+            }
+        return None
+
+def get_next_verification_date(service_id):
+    # Сначала ищем активную поверку с указанной датой
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT next_verification_date
+            FROM meter_replacements
+            WHERE service_id = ? AND type = 'verification' AND is_active = 1
+              AND next_verification_date IS NOT NULL
+            ORDER BY id DESC LIMIT 1
+        """, (service_id,))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        # Иначе последнюю завершённую с датой
+        cursor.execute("""
+            SELECT next_verification_date
+            FROM meter_replacements
+            WHERE service_id = ? AND type = 'verification' AND is_active = 0
+              AND next_verification_date IS NOT NULL
+            ORDER BY date_start DESC LIMIT 1
+        """, (service_id,))
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+def get_verification_by_id(verification_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, service_id, old_final, new_start, date_start, date_end,
+                   amount_norm, next_verification_date, is_active
+            FROM meter_replacements
+            WHERE id = ? AND type = 'verification'
+        """, (verification_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'service_id': row[1],
+                'old_final': row[2],
+                'new_start': row[3],
+                'date_start': row[4],
+                'date_end': row[5],
+                'amount_norm': row[6],
+                'next_verification_date': row[7],
+                'is_active': bool(row[8])
+            }
+        return None
+
+def delete_verification(verification_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM meter_replacements WHERE id = ? AND type = 'verification'", (verification_id,))
         conn.commit()

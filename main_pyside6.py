@@ -28,8 +28,9 @@ try:
         QDialogButtonBox,
         QListWidget,
         QStackedWidget,
+        QDateEdit,
     )
-    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal
+    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal, QDate
     from PySide6.QtGui import QPixmap, QPainter
     import config
     from communal_calculator import (
@@ -965,9 +966,9 @@ class InputPanel(QWidget):
             self.grid_layout.addWidget(cb, row, 2, alignment=Qt.AlignCenter)
 
             if service["type"] == "metered":
-                replace_btn = QPushButton("Поменялся счётчик")
-                replace_btn.setFixedWidth(130)
-                replace_btn.setStyleSheet("""
+                counter_btn = QPushButton("🔧 Счётчик")
+                counter_btn.setFixedWidth(130)
+                counter_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #e0e0e0;
                         border: 1px solid #aaa;
@@ -981,11 +982,10 @@ class InputPanel(QWidget):
                         background-color: #a0a0a0;
                     }
                 """)
-                replace_btn.clicked.connect(lambda checked, k=key: self.replace_meter(k))
-                self.grid_layout.addWidget(replace_btn, row, 3, alignment=Qt.AlignCenter)
+                counter_btn.clicked.connect(lambda checked, k=key: self.show_counter_actions(k))
+                self.grid_layout.addWidget(counter_btn, row, 3, alignment=Qt.AlignCenter)
             else:
-                self.grid_layout.addWidget(QLabel(""), row, 3)   # пустое место для выравнивания
-
+                self.grid_layout.addWidget(QLabel(""), row, 3)
             # Кнопки реквизитов
             provider_btn = QPushButton("🏦 Реквизиты")
             provider_btn.setFixedWidth(130)
@@ -1062,6 +1062,73 @@ class InputPanel(QWidget):
             if self.parent() and hasattr(self.parent(), 'dashboard'):
                 self.parent().dashboard.update_data()
     
+    def show_counter_actions(self, service_key):
+        """Открывает диалог выбора действия со счётчиком."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Действия со счётчиком")
+        dialog.setMinimumWidth(300)
+        dialog.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(dialog)
+
+        label = QLabel("Выберите действие для счётчика:")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        BUTTON_STYLE = ("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+
+        btn_replace = QPushButton("🔁 Замена счётчика")
+        btn_replace.setStyleSheet(BUTTON_STYLE)
+        btn_replace.clicked.connect(lambda: (dialog.accept(), self.replace_meter(service_key)))
+        layout.addWidget(btn_replace)
+
+        btn_verify = QPushButton("🔍 Поверка счётчика")
+        btn_verify.setStyleSheet(BUTTON_STYLE)
+        btn_verify.clicked.connect(lambda: (dialog.accept(), self.show_verification_dialog(service_key)))
+        layout.addWidget(btn_verify)
+
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setStyleSheet(BUTTON_STYLE)
+        cancel_btn.clicked.connect(dialog.reject)
+        layout.addWidget(cancel_btn)
+
+        dialog.exec()
+
+    def show_verification_dialog(self, service_key):
+        from database import get_active_verification, get_service_id_by_key
+        from file_manager import load_settings
+
+        service_id = get_service_id_by_key(service_key)
+        if service_id is None:
+            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            return
+
+        active = get_active_verification(service_id)
+        if active:
+            # Если есть активная поверка – открываем редактирование
+            dialog = VerificationDialog(service_key, active['id'], self)
+        else:
+            dialog = VerificationDialog(service_key, None, self)
+
+        if dialog.exec():
+            load_settings()
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+
     def calculate(self):
         readings = {key: entry.text() for key, entry in self.entries.items()}
         commissions = {key: cb.isChecked() for key, cb in self.checkboxes.items()}
@@ -1094,18 +1161,20 @@ class InputPanel(QWidget):
             total_fee,
             total_sum_with_fee,
             used_replacement_ids,
+            new_start_values,
         ) = result
         # Теперь нужно показать окно с результатами. Создадим новый класс ResultWindow.
         self.result_window = ResultWindow(
     results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee,
-    config.services, save_services, used_replacement_ids  # ← передаём
+    config.services, save_services, used_replacement_ids, new_start_values
 )
         self.result_window.show()
 
 class ResultWindow(QDialog):
     def __init__(self, results_data, current_readings, costs, 
                  total_amount, total_fee, total_sum_with_fee, 
-                 services, save_services_callback, used_replacement_ids):
+                 services, save_services_callback, used_replacement_ids, 
+                 new_start_values):
         super().__init__()
         self.setWindowTitle("Результаты расчёта")
         self.setFixedWidth(850)  # фиксируем ширину окна
@@ -1118,6 +1187,7 @@ class ResultWindow(QDialog):
         self.services = services
         self.save_services_callback = save_services_callback
         self.used_replacement_ids = used_replacement_ids
+        self.new_start_values = new_start_values
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         layout = QVBoxLayout(self)
@@ -1235,6 +1305,7 @@ class ResultWindow(QDialog):
             if value is None or value == "—" or value == "-":
                 return None
             return float(value)
+
         details = []
         for data in self.results_data:
             details.append({
@@ -1243,7 +1314,7 @@ class ResultWindow(QDialog):
                 'start_reading': to_float(data.get("Start value")),
                 'end_reading': to_float(data.get("End value")),
                 'consumption': to_float(data.get("Consumption")),
-                'tariff': float(data["Tariff"]),   # tariff всегда число
+                'tariff': float(data["Tariff"]),
                 'amount': float(data["Amount"]),
                 'fee': float(data["Fee"]),
                 'total': float(data["Total"])
@@ -1255,7 +1326,7 @@ class ResultWindow(QDialog):
             'total_fee': float(self.total_fee),
             'total_with_fee': float(self.total_sum_with_fee),
             'details': details,
-            'used_replacements': []
+            'used_replacements': self.used_replacement_ids   # <-- исправлено
         }
         bill_id = save_bill(bill_data)
 
@@ -1265,7 +1336,12 @@ class ResultWindow(QDialog):
         # Обновляем начальные значения
         for key, reading in self.current_readings.items():
             if key in self.services and self.services[key]["type"] == "metered":
-                self.services[key]["start_value"] = reading
+                # Если для этой услуги есть новое начальное значение от поверки — используем его
+                new_start = self.new_start_values.get(key)
+                if new_start is not None:
+                    self.services[key]["start_value"] = new_start
+                else:
+                    self.services[key]["start_value"] = reading
 
         # Очищаем использованные замены из self.services
         for key, service in self.services.items():
@@ -1281,7 +1357,9 @@ class ResultWindow(QDialog):
         msg = "Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n"
         for key, reading in self.current_readings.items():
             service_name = self.services[key].get("name", key)
-            msg += f"{service_name}: {reading}\n"
+            new_start = self.new_start_values.get(key)
+            display_value = new_start if new_start is not None else reading
+            msg += f"{service_name}: {display_value}\n"
         QMessageBox.information(self, "Готово", msg)
 
         self.accept()
@@ -1558,6 +1636,7 @@ class MeterReplacementDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", "Введите корректные числа")
             return
 
+        #Получаем числовой идентификатор (ID) услуги из таблицы services по её строковому ключу (self.service_key)
         service_id = get_service_id_by_key(self.service_key)
         if service_id is None:
             QMessageBox.warning(self, "Ошибка", "Услуга не найдена в базе данных")
@@ -1567,14 +1646,167 @@ class MeterReplacementDialog(QDialog):
         if not date_str:
             date_str = datetime.now().strftime("%Y-%m-%d")
 
+        #Добавляем новую запись о замене счётчика в таблицу meter_replacements в базе данных
         add_replacement(service_id, old_final, new_start, date_str)
 
         # Перезагружаем услуги из SQLite, чтобы загрузить свежие замены с id
         from file_manager import load_settings
         load_settings()
             
+        #Обновляем интерфейс после сохранения замены
+        '''self.parent() — возвращает родительский виджет диалога (в данном случае это InputPanel, который вызвал диалог).
+
+            Проверка if self.parent(): — убеждается, что родитель существует (на случай, если диалог был создан без родителя).
+
+            self.parent().rebuild_services_ui() — вызывает метод rebuild_services_ui() у родителя. 
+            Этот метод перестраивает всю таблицу услуг в 
+            InputPanel (поля ввода, кнопки, чекбоксы) заново, используя свежие данные из config.services.'''
         if self.parent():
             self.parent().rebuild_services_ui()
+
+        super().accept()
+
+
+class VerificationDialog(QDialog):
+    def __init__(self, service_key, verification_id=None, parent=None):
+        super().__init__(parent)
+        self.service_key = service_key
+        self.verification_id = verification_id
+        self.setWindowTitle("Поверка счётчика" if not verification_id else "Редактирование поверки")
+        self.setMinimumWidth(450)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # --- Поля (как в MeterReplacementDialog + дополнительные) ---
+        self.old_edit = QLineEdit()
+        self.new_edit = QLineEdit()
+        self.date_start_edit = QDateEdit()
+        self.date_start_edit.setCalendarPopup(True)
+        self.date_start_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_start_edit.setDate(QDate.currentDate())
+
+        self.date_end_edit = QDateEdit()
+        self.date_end_edit.setCalendarPopup(True)
+        self.date_end_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_end_edit.setDate(QDate.currentDate())
+        self.date_end_edit.setSpecialValueText("Не завершена")
+        self.date_end_edit.setEnabled(False)
+
+        self.amount_norm_edit = QLineEdit()
+        self.next_verification_date_edit = QDateEdit()
+        self.next_verification_date_edit.setCalendarPopup(True)
+        self.next_verification_date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.next_verification_date_edit.setDate(QDate.currentDate().addYears(3))
+
+        self.completed_check = QCheckBox("Счётчик установлен обратно")
+        self.completed_check.toggled.connect(self.on_completed_toggled)
+
+        # Форма
+        fields = [
+            ("Показания на момент снятия:", self.old_edit),
+            ("Показания на момент установки:", self.new_edit),
+            ("Дата снятия счётчика:", self.date_start_edit),
+            ("Дата установки обратно:", self.date_end_edit),
+            ("Сумма по нормативу (руб.):", self.amount_norm_edit),
+            ("Дата следующей поверки:", self.next_verification_date_edit),
+        ]
+        for label, widget in fields:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            row.addWidget(widget)
+            layout.addLayout(row)
+
+        layout.addWidget(self.completed_check)
+
+        # --- Если редактируем – загружаем данные ---
+        if verification_id:
+            from database import get_verification_by_id
+            data = get_verification_by_id(verification_id)
+            if data:
+                self.old_edit.setText(str(data.get('old_final', '')))
+                self.new_edit.setText(str(data.get('new_start', '')))
+                self.date_start_edit.setDate(QDate.fromString(data['date_start'], "yyyy-MM-dd"))
+                if data['date_end']:
+                    self.date_end_edit.setDate(QDate.fromString(data['date_end'], "yyyy-MM-dd"))
+                    self.completed_check.setChecked(True)
+                else:
+                    self.completed_check.setChecked(False)
+                self.amount_norm_edit.setText(str(data.get('amount_norm', '')))
+                if data.get('next_verification_date'):
+                    self.next_verification_date_edit.setDate(QDate.fromString(data['next_verification_date'], "yyyy-MM-dd"))
+
+        # --- Кнопки ---
+        BUTTON_STYLE = ("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet(BUTTON_STYLE)
+        layout.addWidget(button_box)
+
+    def on_completed_toggled(self, checked):
+        self.date_end_edit.setEnabled(checked)
+        self.new_edit.setEnabled(checked)  # новые показания нужны только при завершении
+        if not checked:
+            self.date_end_edit.setDate(QDate())
+            self.date_end_edit.setSpecialValueText("Не завершена")
+            self.new_edit.clear()
+
+    def get_data(self):
+        old_final = self.old_edit.text().strip()
+        new_start = self.new_edit.text().strip() if self.completed_check.isChecked() else None
+        date_start = self.date_start_edit.date().toString("yyyy-MM-dd")
+        if self.completed_check.isChecked():
+            date_end = self.date_end_edit.date().toString("yyyy-MM-dd")
+        else:
+            date_end = None
+        amount_norm = self.amount_norm_edit.text().strip()
+        next_verification_date = self.next_verification_date_edit.date().toString("yyyy-MM-dd") if not self.next_verification_date_edit.date().isNull() else None
+
+        data = {
+            'old_final': float(old_final) if old_final else None,
+            'new_start': float(new_start) if new_start else None,
+            'date_start': date_start,
+            'date_end': date_end,
+            'amount_norm': float(amount_norm) if amount_norm else None,
+            'next_verification_date': next_verification_date,
+        }
+        return data
+
+    def accept(self):
+        from database import add_verification, update_verification, get_service_id_by_key
+        from config import services
+        from file_manager import save_settings
+
+        data = self.get_data()
+        if not data['date_start']:
+            QMessageBox.warning(self, "Ошибка", "Дата снятия счётчика обязательна")
+            return
+        if data['old_final'] is None:
+            QMessageBox.warning(self, "Ошибка", "Введите показания на момент снятия")
+            return
+
+        service_id = get_service_id_by_key(self.service_key)
+        if service_id is None:
+            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            return
+
+        if self.verification_id:
+            update_verification(self.verification_id, data)
+        else:
+            add_verification(service_id, data)
 
         super().accept()
 

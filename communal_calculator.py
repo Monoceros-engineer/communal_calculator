@@ -162,7 +162,8 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
     total_amount = Decimal('0')
     total_fee = Decimal('0')
     total_sum_with_fee = Decimal('0')
-    used_replacement_ids = []  # ← новый список
+    used_replacement_ids = [] 
+    new_start_values = {}
 
     for key, service in config.services.items():
         if not service.get("enabled", True):
@@ -174,6 +175,34 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
         has_commission = commissions.get(key, False)
 
         if service_type == "metered":
+            # --- 1. Активная поверка (счётчик на поверке) ---
+            active_verification = service.get('active_verification')
+            if active_verification:
+                amount_norm = active_verification.get('amount_norm', 0.0)
+                if amount_norm is None:
+                    amount_norm = 0.0
+                fee = service.get('fee', 0.0)
+                fee_amount = amount_norm * fee if has_commission else 0.0
+                total = amount_norm + fee_amount
+                result = {
+                    "Key": key,
+                    "Name": name + " (норматив)",
+                    "Start value": None,
+                    "End value": None,
+                    "Consumption": 0,
+                    "Tariff": None,
+                    "Amount": amount_norm,
+                    "Fee": fee_amount,
+                    "Total": total
+                }
+                results_data.append(result)
+                costs[key] = amount_norm
+                total_amount += amount_norm
+                total_fee += fee_amount
+                total_sum_with_fee += total
+                continue  # пропускаем обычный расчёт
+
+            # --- 2. Обычный расчёт по показаниям ---
             value_str = readings.get(key, "").strip()
             if not value_str:
                 continue
@@ -189,6 +218,22 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                         "old_final": Decimal(rep["old_final"]),
                         "new_start": Decimal(rep["new_start"])
                     })
+
+                # === ДОБАВЛЕНО ДЛЯ ПОВЕРКИ ===
+                # Проверяем завершённую поверку (если есть и не оплачена)
+                last_verif = service.get('last_completed_verification')
+                if last_verif and not last_verif.get('is_paid', False):
+                    # Добавляем поверку как замену
+                    dec_replacements.append({
+                        "old_final": Decimal(last_verif['old_final']),
+                        "new_start": Decimal(last_verif['new_start'])
+                    })
+                    # Запоминаем ID для последующей оплаты
+                    used_replacement_ids.append(last_verif['id'])
+                    # Запоминаем новое начальное значение для услуги
+                    new_start_values[key] = last_verif['new_start']
+                # === КОНЕЦ ДОБАВЛЕННОГО БЛОКА ===
+
                 total_consumption = calculate_consumption_with_replacements(start, dec_replacements, end)
                 amount = total_consumption * Decimal(str(tariff))
                 if has_commission:
@@ -243,4 +288,4 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             pass
         return None
 
-    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids)
+    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids, new_start_values)
