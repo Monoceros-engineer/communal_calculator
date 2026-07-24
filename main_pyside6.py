@@ -682,8 +682,15 @@ class DashboardWidget(QWidget):
             if start_val is None:
                 start_val = 0.0
 
+            # Проверяем активную поверку
+            active_verif = service.get('active_verification')
+            if active_verif:
+                display_value = "🔴 На поверке"
+            else:
+                display_value = f"{start_val:.2f}"
+
             self.cards_layout.addWidget(QLabel(name), row, 0)
-            self.cards_layout.addWidget(QLabel(f"{start_val:.2f}"), row, 1)
+            self.cards_layout.addWidget(QLabel(display_value), row, 1)
             self.cards_layout.addWidget(QLabel(f"{tariff:.2f} руб."), row, 2)
             row += 1
 

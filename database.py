@@ -26,7 +26,7 @@ def init_db():
             )
         """)
         
-        # Таблица замен счётчиков
+        # Таблица замен/поверок счётчиков (единая)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS meter_replacements (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,10 +35,16 @@ def init_db():
                 new_start REAL NOT NULL,
                 date TEXT,
                 is_paid INTEGER NOT NULL DEFAULT 0,
+                date_start TEXT,
+                date_end TEXT,
+                amount_norm REAL,
+                next_verification_date TEXT,
+                is_active INTEGER DEFAULT 0,
+                type TEXT DEFAULT 'replacement',
                 FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
             )
         """)
-        
+
         # Таблица счетов (основная запись о расчёте)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS bills (
@@ -98,7 +104,24 @@ def init_db():
                 address TEXT
             )
         """)
-        
+        # Добавляем новые колонки, если их ещё нет (для существующих БД)
+        cursor.execute("PRAGMA table_info(meter_replacements)")
+        existing_cols = [col[1] for col in cursor.fetchall()]
+        if 'date_start' not in existing_cols:
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN date_start TEXT")
+        if 'date_end' not in existing_cols:
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN date_end TEXT")
+        if 'amount_norm' not in existing_cols:
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN amount_norm REAL")
+        if 'next_verification_date' not in existing_cols:
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN next_verification_date TEXT")
+        if 'is_active' not in existing_cols:
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN is_active INTEGER DEFAULT 0")
+        if 'type' not in existing_cols:
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN type TEXT DEFAULT 'replacement'")
+
+        # Для старых записей (замен) устанавливаем корректные значения
+        cursor.execute("UPDATE meter_replacements SET type = 'replacement', is_active = 0 WHERE type IS NULL AND is_active IS NULL")
         conn.commit()
 
 # ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
@@ -301,17 +324,39 @@ def load_services():
                     'is_paid': bool(is_paid)
                 }
 
+        # --- Загружаем активные поверки (is_active = 1) ---
+        cursor.execute("""
+            SELECT service_id, id, old_final, new_start, date_start, date_end,
+                amount_norm, next_verification_date, is_paid
+            FROM meter_replacements
+            WHERE type = 'verification' AND is_active = 1
+        """)
+        active_rows = cursor.fetchall()
+        for row in active_rows:
+            service_id, verif_id, old_final, new_start, date_start, date_end, amount_norm, next_verif_date, is_paid = row
+            key = id_to_key.get(service_id)
+            if key and key in services:
+                services[key]['active_verification'] = {
+                    'id': verif_id,
+                    'old_final': old_final,
+                    'new_start': new_start,
+                    'date_start': date_start,
+                    'date_end': date_end,
+                    'amount_norm': amount_norm,
+                    'next_verification_date': next_verif_date,
+                    'is_paid': bool(is_paid)
+                }
+
     return services
 
 # ===== ЗАМЕНЫ =====
 
 def add_replacement(service_id, old_final, new_start, date=None):
-    """Добавляет замену счётчика."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO meter_replacements (service_id, old_final, new_start, date, is_paid)
-            VALUES (?, ?, ?, ?, 0)
+            INSERT INTO meter_replacements (service_id, old_final, new_start, date, is_paid, type, is_active)
+            VALUES (?, ?, ?, ?, 0, 'replacement', 0)
         """, (service_id, old_final, new_start, date))
         conn.commit()
         return cursor.lastrowid
