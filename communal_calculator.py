@@ -163,7 +163,7 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
     total_fee = Decimal('0')
     total_sum_with_fee = Decimal('0')
     used_replacement_ids = [] 
-    new_start_values = {}
+    norm_amounts = {}
 
     for key, service in config.services.items():
         if not service.get("enabled", True):
@@ -230,8 +230,10 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                     })
                     # Запоминаем ID для последующей оплаты
                     used_replacement_ids.append(last_verif['id'])
-                    # Запоминаем новое начальное значение для услуги
-                    new_start_values[key] = last_verif['new_start']
+                    # Запоминаем нормативную сумму
+                    norm_amount = Decimal(last_verif.get('amount_norm', 0))
+                    if norm_amount:
+                        norm_amounts[key] = norm_amount
                 # === КОНЕЦ ДОБАВЛЕННОГО БЛОКА ===
 
                 total_consumption = calculate_consumption_with_replacements(start, dec_replacements, end)
@@ -241,6 +243,9 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                 else:
                     fee_amount = Decimal('0')
                 total = amount + fee_amount
+                # Добавляем норматив, если он есть
+                if key in norm_amounts:
+                    total += norm_amounts[key]
                 # Сохраняем ID использованных замен (если они есть)
                 # Для этого нужно знать ID каждой замены. В текущей структуре service["replacements"] может содержать ID?
                 # В `load_services` мы загружаем замены с полем 'id'. Добавим его.
@@ -288,4 +293,4 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             pass
         return None
 
-    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids, new_start_values)
+    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids)

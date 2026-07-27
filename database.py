@@ -32,7 +32,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 service_id INTEGER NOT NULL,
                 old_final REAL NOT NULL,
-                new_start REAL NOT NULL,
+                new_start REAL,
                 date TEXT,
                 is_paid INTEGER NOT NULL DEFAULT 0,
                 date_start TEXT,
@@ -234,22 +234,44 @@ def migrate_from_json():
 # ===== ФУНКЦИИ ДЛЯ РАБОТЫ С УСЛУГАМИ =====
 
 def save_service(key, service):
-    """Сохраняет услугу в таблицу services (вставка или обновление)."""
+    """Сохраняет услугу в таблицу services (обновляет или вставляет)."""
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO services (key, name, type, enabled, tariff, fee, start_value, provider_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            key,
-            service['name'],
-            service['type'],
-            1 if service.get('enabled', True) else 0,
-            service['tariff'],
-            service.get('fee', 0.0),
-            service.get('start_value'),
-            service.get('provider_id')   
-        ))
+        # Проверяем, существует ли уже услуга с таким ключом
+        cursor.execute("SELECT id FROM services WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        if row:
+            # Обновляем существующую запись, сохраняя ID
+            service_id = row[0]
+            cursor.execute("""
+                UPDATE services
+                SET name = ?, type = ?, enabled = ?, tariff = ?, fee = ?, start_value = ?, provider_id = ?
+                WHERE id = ?
+            """, (
+                service['name'],
+                service['type'],
+                1 if service.get('enabled', True) else 0,
+                service['tariff'],
+                service.get('fee', 0.0),
+                service.get('start_value'),
+                service.get('provider_id'),
+                service_id
+            ))
+        else:
+            # Вставляем новую запись
+            cursor.execute("""
+                INSERT INTO services (key, name, type, enabled, tariff, fee, start_value, provider_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                key,
+                service['name'],
+                service['type'],
+                1 if service.get('enabled', True) else 0,
+                service['tariff'],
+                service.get('fee', 0.0),
+                service.get('start_value'),
+                service.get('provider_id')
+            ))
         conn.commit()
 
 def delete_service(key):

@@ -1168,12 +1168,11 @@ class InputPanel(QWidget):
             total_fee,
             total_sum_with_fee,
             used_replacement_ids,
-            new_start_values,
         ) = result
         # Теперь нужно показать окно с результатами. Создадим новый класс ResultWindow.
         self.result_window = ResultWindow(
     results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee,
-    config.services, save_services, used_replacement_ids, new_start_values
+    config.services, save_services, used_replacement_ids
 )
         self.result_window.show()
 
@@ -1181,7 +1180,7 @@ class ResultWindow(QDialog):
     def __init__(self, results_data, current_readings, costs, 
                  total_amount, total_fee, total_sum_with_fee, 
                  services, save_services_callback, used_replacement_ids, 
-                 new_start_values):
+                 ):
         super().__init__()
         self.setWindowTitle("Результаты расчёта")
         self.setFixedWidth(850)  # фиксируем ширину окна
@@ -1194,7 +1193,6 @@ class ResultWindow(QDialog):
         self.services = services
         self.save_services_callback = save_services_callback
         self.used_replacement_ids = used_replacement_ids
-        self.new_start_values = new_start_values
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         layout = QVBoxLayout(self)
@@ -1343,12 +1341,7 @@ class ResultWindow(QDialog):
         # Обновляем начальные значения
         for key, reading in self.current_readings.items():
             if key in self.services and self.services[key]["type"] == "metered":
-                # Если для этой услуги есть новое начальное значение от поверки — используем его
-                new_start = self.new_start_values.get(key)
-                if new_start is not None:
-                    self.services[key]["start_value"] = new_start
-                else:
-                    self.services[key]["start_value"] = reading
+                self.services[key]["start_value"] = reading
 
         # Очищаем использованные замены из self.services
         for key, service in self.services.items():
@@ -1364,9 +1357,7 @@ class ResultWindow(QDialog):
         msg = "Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n"
         for key, reading in self.current_readings.items():
             service_name = self.services[key].get("name", key)
-            new_start = self.new_start_values.get(key)
-            display_value = new_start if new_start is not None else reading
-            msg += f"{service_name}: {display_value}\n"
+            msg += f"{service_name}: {reading}\n"
         QMessageBox.information(self, "Готово", msg)
 
         self.accept()
