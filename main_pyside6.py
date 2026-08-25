@@ -1617,6 +1617,11 @@ class MeterReplacementDialog(QDialog):
         layout.addWidget(QLabel("Дата (необязательно, в формате ГГГГ-ММ-ДД):"))
         self.date_edit = QLineEdit()
         layout.addWidget(self.date_edit)
+
+        # --- ДОБАВЛЯЕМ ЧЕКБОКС ---
+        self.pay_checkbox = QCheckBox("Оплатить расход по старому счётчику")
+        layout.addWidget(self.pay_checkbox)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -1624,7 +1629,9 @@ class MeterReplacementDialog(QDialog):
 
     def accept(self):
         from communal_calculator import normalize_decimal
-        from database import get_service_id_by_key, add_replacement
+        from database import get_service_id_by_key, add_replacement, create_payment_record
+        from config import services
+        from file_manager import load_settings, save_settings
         from datetime import datetime
 
         try:
@@ -1644,12 +1651,56 @@ class MeterReplacementDialog(QDialog):
         if not date_str:
             date_str = datetime.now().strftime("%Y-%m-%d")
 
-        #Добавляем новую запись о замене счётчика в таблицу meter_replacements в базе данных
-        add_replacement(service_id, old_final, new_start, date_str)
+        # 1. Создаём запись о замене (как обычно)
+        replacement_id = add_replacement(service_id, old_final, new_start, date_str)
 
-        # Перезагружаем услуги из SQLite, чтобы загрузить свежие замены с id
-        from file_manager import load_settings
+        # 2. Если чекбокс отмечен — оплачиваем расход по старому счётчику
+        if self.pay_checkbox.isChecked():
+            # Получаем текущее start_value услуги
+            service = services.get(self.service_key)
+            if service is None:
+                QMessageBox.warning(self, "Ошибка", "Услуга не найдена в конфигурации")
+                return
+            start_value = service.get("start_value", 0.0)
+            if start_value is None:
+                start_value = 0.0
+
+            # Расход по старому счётчику
+            consumption = old_final - start_value
+            if consumption < 0:
+                QMessageBox.warning(self, "Ошибка", "Показания старого счётчика меньше начальных")
+                return
+
+            tariff = service.get("tariff", 0.0)
+            amount = consumption * tariff
+
+            # Создаём платёж
+            try:
+                create_payment_record(
+                    service_key=self.service_key,
+                    amount=amount,
+                    consumption=consumption,
+                    start_reading=start_value,
+                    end_reading=old_final,
+                    tariff=tariff,
+                    fee=0.0,
+                    date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    replacement_ids=[replacement_id]  # помечаем эту замену оплаченной
+                )
+            except Exception as e:
+                QMessageBox.warning(self, "Ошибка", f"Не удалось сохранить платёж: {e}")
+                return
+
+            # Обновляем start_value на new_start
+            service["start_value"] = new_start
+            save_settings()
+
+        # Перезагружаем услуги и обновляем интерфейс
         load_settings()
+        if self.parent():
+            self.parent().rebuild_services_ui()
+
+        super().accept()
             
         #Обновляем интерфейс после сохранения замены
         '''self.parent() — возвращает родительский виджет диалога (в данном случае это InputPanel, который вызвал диалог).

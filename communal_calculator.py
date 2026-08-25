@@ -211,13 +211,13 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                 end = Decimal(normalized)
                 start = Decimal(service.get("start_value", 0))
                 replacements = service.get("replacements", [])
-                # Преобразуем замены в Decimal
                 dec_replacements = []
                 for rep in replacements:
-                    dec_replacements.append({
-                        "old_final": Decimal(rep["old_final"]),
-                        "new_start": Decimal(rep["new_start"])
-                    })
+                    if not rep.get('is_paid', False):   # добавляем только неоплаченные замены
+                        dec_replacements.append({
+                            "old_final": Decimal(rep["old_final"]),
+                            "new_start": Decimal(rep["new_start"])
+                        })
 
                 # === ДОБАВЛЕНО ДЛЯ ПОВЕРКИ ===
                 # Проверяем завершённую поверку (если есть и не оплачена)

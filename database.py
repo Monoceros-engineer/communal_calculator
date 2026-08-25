@@ -652,3 +652,83 @@ def delete_verification(verification_id):
         cursor = conn.cursor()
         cursor.execute("DELETE FROM meter_replacements WHERE id = ? AND type = 'verification'", (verification_id,))
         conn.commit()
+
+def create_payment_record(service_key, amount, consumption,
+                          start_reading, end_reading, tariff,
+                          fee, date, replacement_ids=None):
+    """
+    Сохраняет один платёж (расход) в БД и при необходимости помечает замены/поверки как оплаченные.
+
+    Аргументы:
+        service_key (str): ключ услуги (например, 'gas').
+        amount (float): сумма к оплате (без комиссии).
+        consumption (float or None): расход (в куб.м, кВт·ч и т.д.) – может быть None для нормативной суммы.
+        start_reading (float or None): начальное показание (может быть None).
+        end_reading (float or None): конечное показание (может быть None).
+        tariff (float or None): тариф (может быть None для нормативной суммы).
+        fee (float): комиссия (для простоты пока оставляем 0, т.к. при оплате сразу комиссия не применяется).
+        date (str): дата в формате "ГГГГ-ММ-ДД ЧЧ:ММ:СС".
+        replacement_ids (list or None): список ID записей из meter_replacements, которые нужно пометить оплаченными.
+
+    Возвращает:
+        int: ID созданного счёта (bills.id).
+    """
+    import sqlite3
+    from paths import get_db_path
+    from config import services
+
+    with sqlite3.connect(get_db_path()) as conn:
+        cursor = conn.cursor()
+
+        # 1. Получаем service_id по ключу
+        cursor.execute("SELECT id FROM services WHERE key = ?", (service_key,))
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Услуга с ключом '{service_key}' не найдена")
+        service_id = row[0]
+
+        # 2. Вставляем запись в таблицу bills (один счёт)
+        # total_amount = amount (без комиссии)
+        # total_fee = 0 (комиссия не применяется при оплате напрямую)
+        # total_with_fee = amount (т.к. fee = 0)
+        cursor.execute("""
+            INSERT INTO bills (date, total_amount, total_fee, total_with_fee)
+            VALUES (?, ?, ?, ?)
+        """, (date, amount, 0.0, amount))
+        bill_id = cursor.lastrowid
+
+        # 3. Вставляем деталь счёта (одна услуга в этом счете)
+        cursor.execute("""
+            INSERT INTO bill_details (
+                bill_id, service_id, service_name,
+                start_reading, end_reading,
+                consumption, tariff, amount, fee, total
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            bill_id,
+            service_id,
+            services.get(service_key, {}).get('name', service_key),
+            start_reading,
+            end_reading,
+            consumption,
+            tariff if tariff is not None else 0.0,
+            amount,
+            0.0,  # fee = 0
+            amount  # total = amount + fee
+        ))
+
+        # 4. Если передан список замен/поверок, связываем их с этим счётом и помечаем оплаченными
+        if replacement_ids:
+            for rep_id in replacement_ids:
+                # Добавляем связь в bill_replacements
+                cursor.execute("""
+                    INSERT OR IGNORE INTO bill_replacements (bill_id, replacement_id)
+                    VALUES (?, ?)
+                """, (bill_id, rep_id))
+                # Помечаем замену/поверку как оплаченную
+                cursor.execute("""
+                    UPDATE meter_replacements SET is_paid = 1 WHERE id = ?
+                """, (rep_id,))
+
+        conn.commit()
+        return bill_id
