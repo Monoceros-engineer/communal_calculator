@@ -164,6 +164,8 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
     total_sum_with_fee = Decimal('0')
     used_replacement_ids = [] 
     norm_amounts = {}
+    verification_ids_used = []   # для ID поверок, где расход был использован
+    norm_verification_ids = []   # для ID поверок, где норматив был использован
 
     for key, service in config.services.items():
         if not service.get("enabled", True):
@@ -222,18 +224,20 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                 # === ДОБАВЛЕНО ДЛЯ ПОВЕРКИ ===
                 # Проверяем завершённую поверку (если есть и не оплачена)
                 last_verif = service.get('last_completed_verification')
-                if last_verif and not last_verif.get('is_paid', False):
-                    # Добавляем поверку как замену
-                    dec_replacements.append({
-                        "old_final": Decimal(last_verif['old_final']),
-                        "new_start": Decimal(last_verif['new_start'])
-                    })
-                    # Запоминаем ID для последующей оплаты
-                    used_replacement_ids.append(last_verif['id'])
-                    # Запоминаем нормативную сумму
-                    norm_amount = Decimal(last_verif.get('amount_norm', 0))
-                    if norm_amount:
-                        norm_amounts[key] = norm_amount
+                if last_verif:
+                    # Расход до снятия — если не оплачен
+                    if not last_verif.get('is_consumption_paid', False):
+                        dec_replacements.append({
+                            "old_final": Decimal(last_verif['old_final']),
+                            "new_start": Decimal(last_verif['new_start'])
+                        })
+                        verification_ids_used.append(last_verif['id'])
+                    # Норматив — если не оплачен
+                    if not last_verif.get('is_norm_paid', False):
+                        norm_amount = Decimal(last_verif.get('amount_norm', 0))
+                        if norm_amount:
+                            norm_amounts[key] = norm_amount
+                            norm_verification_ids.append(last_verif['id'])   # запоминаем ID
                 # === КОНЕЦ ДОБАВЛЕННОГО БЛОКА ===
 
                 total_consumption = calculate_consumption_with_replacements(start, dec_replacements, end)
@@ -293,4 +297,4 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             pass
         return None
 
-    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids)
+    return (results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee, used_replacement_ids, verification_ids_used, norm_verification_ids)

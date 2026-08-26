@@ -1168,18 +1168,22 @@ class InputPanel(QWidget):
             total_fee,
             total_sum_with_fee,
             used_replacement_ids,
+            verification_ids_used,
+            norm_verification_ids,
         ) = result
         # Теперь нужно показать окно с результатами. Создадим новый класс ResultWindow.
         self.result_window = ResultWindow(
-    results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee,
-    config.services, save_services, used_replacement_ids
-)
+            results_data, current_readings, costs, total_amount, total_fee, total_sum_with_fee,
+            config.services, save_services, used_replacement_ids,
+            verification_ids_used, norm_verification_ids
+        )
         self.result_window.show()
 
 class ResultWindow(QDialog):
     def __init__(self, results_data, current_readings, costs, 
                  total_amount, total_fee, total_sum_with_fee, 
-                 services, save_services_callback, used_replacement_ids, 
+                 services, save_services_callback, used_replacement_ids,
+                  verification_ids_used, norm_verification_ids
                  ):
         super().__init__()
         self.setWindowTitle("Результаты расчёта")
@@ -1193,6 +1197,8 @@ class ResultWindow(QDialog):
         self.services = services
         self.save_services_callback = save_services_callback
         self.used_replacement_ids = used_replacement_ids
+        self.verification_ids_used = verification_ids_used
+        self.norm_verification_ids = norm_verification_ids
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         layout = QVBoxLayout(self)
@@ -1301,7 +1307,7 @@ class ResultWindow(QDialog):
         self.setFixedHeight(total_height)
 
     def save_and_close(self):
-        from database import save_bill, mark_replacements_paid
+        from database import save_bill, mark_replacements_paid, get_verification_by_id, update_verification
         from file_manager import save_settings
         from datetime import datetime
 
@@ -1337,6 +1343,20 @@ class ResultWindow(QDialog):
 
         if self.used_replacement_ids:
             mark_replacements_paid(self.used_replacement_ids, bill_id)
+
+        # Обновляем is_consumption_paid для использованных поверок
+        for vid in self.verification_ids_used:
+            verif = get_verification_by_id(vid)
+            if verif:
+                verif['is_consumption_paid'] = 1
+                update_verification(vid, verif)
+
+        # Обновляем is_norm_paid для нормативов
+        for vid in self.norm_verification_ids:
+            verif = get_verification_by_id(vid)
+            if verif:
+                verif['is_norm_paid'] = 1
+                update_verification(vid, verif)
 
         # Обновляем начальные значения
         for key, reading in self.current_readings.items():
@@ -1750,6 +1770,10 @@ class VerificationDialog(QDialog):
         self.completed_check = QCheckBox("Счётчик установлен обратно")
         self.completed_check.toggled.connect(self.on_completed_toggled)
 
+        # --- Новые чекбоксы для оплаты ---
+        self.pay_consumption_check = QCheckBox("Оплатить расход на момент снятия")
+        self.pay_norm_check = QCheckBox("Оплатить сумму по нормативу")        
+
         # Форма
         fields = [
             ("Показания на момент снятия:", self.old_edit),
@@ -1766,6 +1790,8 @@ class VerificationDialog(QDialog):
             layout.addLayout(row)
 
         layout.addWidget(self.completed_check)
+        layout.addWidget(self.pay_consumption_check)
+        layout.addWidget(self.pay_norm_check)
 
         # --- Если редактируем – загружаем данные ---
         if verification_id:
@@ -1775,6 +1801,8 @@ class VerificationDialog(QDialog):
                 self.old_edit.setText(str(data.get('old_final', '')))
                 self.new_edit.setText(str(data.get('new_start', '')))
                 self.date_start_edit.setDate(QDate.fromString(data['date_start'], "yyyy-MM-dd"))
+                self.pay_consumption_check.setChecked(data.get('is_consumption_paid', False))
+                self.pay_norm_check.setChecked(data.get('is_norm_paid', False))
                 if data['date_end']:
                     self.date_end_edit.setDate(QDate.fromString(data['date_end'], "yyyy-MM-dd"))
                     self.completed_check.setChecked(True)
@@ -1835,11 +1863,14 @@ class VerificationDialog(QDialog):
         return data
 
     def accept(self):
-        from database import add_verification, update_verification, get_service_id_by_key
+        from database import add_verification, update_verification, get_service_id_by_key, save_bill
         from config import services
         from file_manager import save_settings
+        from decimal import Decimal
+        from datetime import datetime
 
         data = self.get_data()
+        # Валидация
         if not data['date_start']:
             QMessageBox.warning(self, "Ошибка", "Дата снятия счётчика обязательна")
             return
@@ -1852,10 +1883,97 @@ class VerificationDialog(QDialog):
             QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
             return
 
+        # Сохраняем поверку (создаём или обновляем)
         if self.verification_id:
             update_verification(self.verification_id, data)
         else:
-            add_verification(service_id, data)
+            self.verification_id = add_verification(service_id, data)
+
+        # --- Немедленная оплата, если чекбоксы активны ---
+        pay_consumption = self.pay_consumption_check.isChecked()
+        pay_norm = self.pay_norm_check.isChecked()
+
+        if pay_consumption or pay_norm:
+            # Получаем текущие данные услуги
+            service = services.get(self.service_key)
+            if not service:
+                QMessageBox.warning(self, "Ошибка", "Услуга не найдена в config")
+                return
+
+            start_value = Decimal(service.get('start_value', 0))
+            old_final = Decimal(data['old_final'])
+            tariff = Decimal(service.get('tariff', 0))
+
+            details = []
+            total_amount = Decimal('0')
+            total_fee = Decimal('0')
+            total_with_fee = Decimal('0')
+
+            # 1. Оплата расхода на момент снятия
+            if pay_consumption:
+                consumption = max(old_final - start_value, Decimal('0'))
+                amount = consumption * tariff
+                fee = Decimal('0')  # комиссию пока не добавляем, можно добавить позже
+                total = amount + fee
+                details.append({
+                    'service_key': self.service_key,
+                    'service_name': service['name'],
+                    'start_reading': float(start_value),
+                    'end_reading': float(old_final),
+                    'consumption': float(consumption),
+                    'tariff': float(tariff),
+                    'amount': float(amount),
+                    'fee': float(fee),
+                    'total': float(total)
+                })
+                total_amount += amount
+                total_fee += fee
+                total_with_fee += total
+
+            # 2. Оплата суммы по нормативу
+            if pay_norm:
+                amount_norm = Decimal(data['amount_norm'] or 0)
+                if amount_norm > 0:
+                    details.append({
+                        'service_key': self.service_key,
+                        'service_name': service['name'],
+                        'start_reading': None,
+                        'end_reading': None,
+                        'consumption': 0,
+                        'tariff': 0,
+                        'amount': float(amount_norm),
+                        'fee': 0,
+                        'total': float(amount_norm)
+                    })
+                    total_amount += amount_norm
+                    total_with_fee += amount_norm
+
+            # Если есть детали, сохраняем в bills
+            if details:
+                bill_data = {
+                    'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'total_amount': float(total_amount),
+                    'total_fee': float(total_fee),
+                    'total_with_fee': float(total_with_fee),
+                    'details': details,
+                    'used_replacements': []   # Не передаём ID поверки, чтобы не трогать is_paid
+                }
+                bill_id = save_bill(bill_data)
+
+                # Обновляем start_value только если оплачен расход
+                if pay_consumption and data['date_end'] and data['new_start'] is not None:
+                    services[self.service_key]['start_value'] = data['new_start']
+                    save_settings()
+
+                # Обновляем флаги оплаты
+                if pay_consumption:
+                    data['is_consumption_paid'] = 1
+                if pay_norm:
+                    data['is_norm_paid'] = 1
+                if self.verification_id:
+                    update_verification(self.verification_id, data)
+
+                QMessageBox.information(self, "Успешно", "Поверка сохранена и оплачена")
 
         super().accept()
 

@@ -41,6 +41,8 @@ def init_db():
                 next_verification_date TEXT,
                 is_active INTEGER DEFAULT 0,
                 type TEXT DEFAULT 'replacement',
+                is_consumption_paid INTEGER DEFAULT 0,
+                is_norm_paid INTEGER DEFAULT 0,
                 FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
             )
         """)
@@ -326,13 +328,14 @@ def load_services():
         # --- Загружаем завершённые поверки (is_active = 0) ---
         cursor.execute("""
             SELECT service_id, id, old_final, new_start, date_start, date_end,
-                   amount_norm, next_verification_date, is_paid
+                amount_norm, next_verification_date,
+                is_consumption_paid, is_norm_paid
             FROM meter_replacements
             WHERE type = 'verification' AND is_active = 0
         """)
         verif_rows = cursor.fetchall()
         for row in verif_rows:
-            service_id, verif_id, old_final, new_start, date_start, date_end, amount_norm, next_verif_date, is_paid = row
+            service_id, verif_id, old_final, new_start, date_start, date_end, amount_norm, next_verif_date, is_consumption_paid, is_norm_paid = row
             key = id_to_key.get(service_id)
             if key and key in services:
                 services[key]['last_completed_verification'] = {
@@ -343,7 +346,8 @@ def load_services():
                     'date_end': date_end,
                     'amount_norm': amount_norm,
                     'next_verification_date': next_verif_date,
-                    'is_paid': bool(is_paid)
+                    'is_consumption_paid': bool(is_consumption_paid),
+                    'is_norm_paid': bool(is_norm_paid)
                 }
 
         # --- Загружаем активные поверки (is_active = 1) ---
@@ -518,8 +522,9 @@ def add_verification(service_id, data):
         cursor.execute("""
             INSERT INTO meter_replacements (
                 service_id, old_final, new_start, date_start, date_end,
-                amount_norm, next_verification_date, is_active, type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                amount_norm, next_verification_date, is_active, type,
+                is_consumption_paid, is_norm_paid
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             service_id,
             data.get('old_final'),
@@ -529,7 +534,9 @@ def add_verification(service_id, data):
             data.get('amount_norm'),
             data.get('next_verification_date'),
             1 if not data.get('date_end') else 0,
-            'verification'
+            'verification',
+            data.get('is_consumption_paid', 0),
+            data.get('is_norm_paid', 0)
         ))
         conn.commit()
         return cursor.lastrowid
@@ -540,7 +547,8 @@ def update_verification(verification_id, data):
         cursor.execute("""
             UPDATE meter_replacements
             SET old_final = ?, new_start = ?, date_start = ?, date_end = ?,
-                amount_norm = ?, next_verification_date = ?, is_active = ?
+                amount_norm = ?, next_verification_date = ?, is_active = ?,
+                is_consumption_paid = ?, is_norm_paid = ?
             WHERE id = ?
         """, (
             data.get('old_final'),
@@ -550,6 +558,8 @@ def update_verification(verification_id, data):
             data.get('amount_norm'),
             data.get('next_verification_date'),
             1 if not data.get('date_end') else 0,
+            data.get('is_consumption_paid', 0),
+            data.get('is_norm_paid', 0),
             verification_id
         ))
         conn.commit()
@@ -628,7 +638,8 @@ def get_verification_by_id(verification_id):
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, service_id, old_final, new_start, date_start, date_end,
-                   amount_norm, next_verification_date, is_active
+                   amount_norm, next_verification_date, is_active,
+                   is_consumption_paid, is_norm_paid
             FROM meter_replacements
             WHERE id = ? AND type = 'verification'
         """, (verification_id,))
@@ -643,7 +654,9 @@ def get_verification_by_id(verification_id):
                 'date_end': row[5],
                 'amount_norm': row[6],
                 'next_verification_date': row[7],
-                'is_active': bool(row[8])
+                'is_active': bool(row[8]),
+                'is_consumption_paid': bool(row[9]),
+                'is_norm_paid': bool(row[10])
             }
         return None
 
