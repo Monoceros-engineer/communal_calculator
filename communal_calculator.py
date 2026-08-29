@@ -172,19 +172,17 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             continue
         name = service["name"]
         service_type = service["type"]
-        tariff = service["tariff"]
-        fee = service.get('fee', 0.0)
+        tariff = Decimal(str(service["tariff"]))
+        fee = Decimal(str(service.get('fee', 0.0)))
         has_commission = commissions.get(key, False)
 
         if service_type == "metered":
             # --- 1. Активная поверка (счётчик на поверке) ---
             active_verification = service.get('active_verification')
             if active_verification:
-                amount_norm = active_verification.get('amount_norm', 0.0)
-                if amount_norm is None:
-                    amount_norm = 0.0
-                fee = service.get('fee', 0.0)
-                fee_amount = amount_norm * fee if has_commission else 0.0
+                amount_norm = Decimal(str(active_verification.get('amount_norm') or 0.0))
+                fee = Decimal(str(service.get('fee', 0.0)))
+                fee_amount = amount_norm * fee if has_commission else Decimal('0')
                 total = amount_norm + fee_amount
                 result = {
                     "Key": key,
@@ -234,7 +232,7 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
                         verification_ids_used.append(last_verif['id'])
                     # Норматив — если не оплачен
                     if not last_verif.get('is_norm_paid', False):
-                        norm_amount = Decimal(last_verif.get('amount_norm', 0))
+                        norm_amount = Decimal(str(last_verif.get('amount_norm') or 0))
                         if norm_amount:
                             norm_amounts[key] = norm_amount
                             norm_verification_ids.append(last_verif['id'])   # запоминаем ID

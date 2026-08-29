@@ -1224,10 +1224,10 @@ class ResultWindow(QDialog):
             self.table.setItem(i, 1, QTableWidgetItem(str(data["Start value"])))
             self.table.setItem(i, 2, QTableWidgetItem(str(data["End value"])))
             self.table.setItem(i, 3, QTableWidgetItem(str(data["Consumption"])))
-            self.table.setItem(i, 4, QTableWidgetItem(f"{data['Tariff']:.2f}"))
-            self.table.setItem(i, 5, QTableWidgetItem(f"{data['Amount']:.2f}"))
-            self.table.setItem(i, 6, QTableWidgetItem(f"{data['Fee']:.2f}"))
-            self.table.setItem(i, 7, QTableWidgetItem(f"{data['Total']:.2f}"))
+            self.table.setItem(i, 4, QTableWidgetItem(f"{data['Tariff']:.2f}" if data['Tariff'] is not None else ""))
+            self.table.setItem(i, 5, QTableWidgetItem(f"{data['Amount']:.2f}" if data['Amount'] is not None else ""))
+            self.table.setItem(i, 6, QTableWidgetItem(f"{data['Fee']:.2f}" if data['Fee'] is not None else ""))
+            self.table.setItem(i, 7, QTableWidgetItem(f"{data['Total']:.2f}" if data['Total'] is not None else ""))
         layout.addWidget(self.table)
 
         # Задаем общий стиль для таблицы
@@ -1310,6 +1310,25 @@ class ResultWindow(QDialog):
         from database import save_bill, mark_replacements_paid, get_verification_by_id, update_verification
         from file_manager import save_settings
         from datetime import datetime
+        import math
+        from decimal import Decimal
+
+        # Фильтруем результаты: исключаем записи по счётчику без Start value
+        filtered_results = []
+        for data in self.results_data:
+            service_key = data.get("Key")
+            service = self.services.get(service_key)
+            if not service:
+                # Если услуга не найдена — пропускаем
+                continue
+            # Если услуга фиксированная — всегда добавляем
+            if service.get("type") == "fixed":
+                filtered_results.append(data)
+                continue
+            # Для услуг по счётчику проверяем Start value
+            start_val = data.get('Start value')
+            if start_val is not None and isinstance(start_val, (int, float, Decimal)):
+                filtered_results.append(data)
 
         # Подготовка данных для БД
         def to_float(value):
@@ -1317,15 +1336,16 @@ class ResultWindow(QDialog):
                 return None
             return float(value)
 
+        # Формируем детали только для отфильтрованных записей
         details = []
-        for data in self.results_data:
+        for data in filtered_results:
             details.append({
                 'service_key': data.get("Key"),
                 'service_name': data["Name"],
                 'start_reading': to_float(data.get("Start value")),
                 'end_reading': to_float(data.get("End value")),
                 'consumption': to_float(data.get("Consumption")),
-                'tariff': float(data["Tariff"]),
+                'tariff': float(data["Tariff"]) if data["Tariff"] is not None else 0,
                 'amount': float(data["Amount"]),
                 'fee': float(data["Fee"]),
                 'total': float(data["Total"])
@@ -1862,6 +1882,31 @@ class VerificationDialog(QDialog):
         }
         return data
 
+    def ask_fee_percent(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Настройка комиссии банка")
+        dialog.setMinimumWidth(300)
+        dialog.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк:"))
+        percent_edit = QLineEdit()
+        layout.addWidget(percent_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                percent = float(percent_edit.text().strip())
+                if percent < 0 or percent > 100:
+                    raise ValueError
+                return percent
+            except:
+                QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
+                return None
+        return None
+
     def accept(self):
         from database import add_verification, update_verification, get_service_id_by_key, save_bill
         from config import services
@@ -1904,76 +1949,102 @@ class VerificationDialog(QDialog):
             old_final = Decimal(data['old_final'])
             tariff = Decimal(service.get('tariff', 0))
 
+            items = []
+            total_without_fee = Decimal('0')
+
+            # 1. Расход до снятия
+            if pay_consumption:
+                consumption = max(old_final - start_value, Decimal('0'))
+                amount = consumption * tariff
+                items.append(("Расход до снятия", float(amount)))
+                total_without_fee += amount
+
+            # 2. Норматив
+            if pay_norm:
+                amount_norm = Decimal(data['amount_norm'] or 0)
+                if amount_norm > 0:
+                    items.append(("Сумма по нормативу", float(amount_norm)))
+                    total_without_fee += amount_norm
+
+            if not items:
+                QMessageBox.warning(self, "Ошибка", "Нет позиций для оплаты")
+                return
+
+            # Открываем диалог подтверждения
+            confirm = PaymentConfirmationDialog(items, service['name'], self)
+            if confirm.exec() != QDialog.Accepted:
+                return  # пользователь отменил
+
+            # Получаем результат из PaymentConfirmationDialog
+            result = confirm.get_result()
+            apply_fee = result['apply_fee']
+
+            # Определяем процент комиссии
+            fee_percent = Decimal('0')
+            if apply_fee:
+                service_fee = Decimal(service.get('fee', 0.0))
+                if service_fee == 0:
+                    # Комиссия не задана — запрашиваем у пользователя
+                    percent = self.ask_fee_percent()
+                    if percent is None:
+                        return  # пользователь отменил
+                    # Сохраняем комиссию в настройках услуги
+                    service['fee'] = percent / 100.0
+                    save_settings()
+                    fee_percent = Decimal(service['fee'])
+                else:
+                    fee_percent = service_fee
+
+            # Формируем детали для save_bill с учётом комиссии
             details = []
             total_amount = Decimal('0')
             total_fee = Decimal('0')
             total_with_fee = Decimal('0')
 
-            # 1. Оплата расхода на момент снятия
-            if pay_consumption:
-                consumption = max(old_final - start_value, Decimal('0'))
-                amount = consumption * tariff
-                fee = Decimal('0')  # комиссию пока не добавляем, можно добавить позже
-                total = amount + fee
+            for desc, amount in items:
+                amount_d = Decimal(str(amount))
+                fee_amount = amount_d * fee_percent if apply_fee else Decimal('0')
+                total_item = amount_d + fee_amount
                 details.append({
                     'service_key': self.service_key,
                     'service_name': service['name'],
-                    'start_reading': float(start_value),
-                    'end_reading': float(old_final),
-                    'consumption': float(consumption),
-                    'tariff': float(tariff),
-                    'amount': float(amount),
-                    'fee': float(fee),
-                    'total': float(total)
+                    'start_reading': float(start_value) if desc == "Расход до снятия" else None,
+                    'end_reading': float(old_final) if desc == "Расход до снятия" else None,
+                    'consumption': float(amount_d / tariff) if desc == "Расход до снятия" else 0,
+                    'tariff': float(tariff) if desc == "Расход до снятия" else 0,
+                    'amount': float(amount_d),
+                    'fee': float(fee_amount),
+                    'total': float(total_item)
                 })
-                total_amount += amount
-                total_fee += fee
-                total_with_fee += total
+                total_amount += amount_d
+                total_fee += fee_amount
+                total_with_fee += total_item
 
-            # 2. Оплата суммы по нормативу
+            # Сохраняем в bills
+            bill_data = {
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'total_amount': float(total_amount),
+                'total_fee': float(total_fee),
+                'total_with_fee': float(total_with_fee),
+                'details': details,
+                'used_replacements': []
+            }
+            bill_id = save_bill(bill_data)
+
+            # Обновляем start_value если оплачен расход
+            if pay_consumption and data['date_end'] and data['new_start'] is not None:
+                services[self.service_key]['start_value'] = data['new_start']
+                save_settings()
+
+            # Обновляем флаги оплаты
+            if pay_consumption:
+                data['is_consumption_paid'] = 1
             if pay_norm:
-                amount_norm = Decimal(data['amount_norm'] or 0)
-                if amount_norm > 0:
-                    details.append({
-                        'service_key': self.service_key,
-                        'service_name': service['name'],
-                        'start_reading': None,
-                        'end_reading': None,
-                        'consumption': 0,
-                        'tariff': 0,
-                        'amount': float(amount_norm),
-                        'fee': 0,
-                        'total': float(amount_norm)
-                    })
-                    total_amount += amount_norm
-                    total_with_fee += amount_norm
+                data['is_norm_paid'] = 1
+            if self.verification_id:
+                update_verification(self.verification_id, data)
 
-            # Если есть детали, сохраняем в bills
-            if details:
-                bill_data = {
-                    'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'total_amount': float(total_amount),
-                    'total_fee': float(total_fee),
-                    'total_with_fee': float(total_with_fee),
-                    'details': details,
-                    'used_replacements': []   # Не передаём ID поверки, чтобы не трогать is_paid
-                }
-                bill_id = save_bill(bill_data)
-
-                # Обновляем start_value только если оплачен расход
-                if pay_consumption and data['date_end'] and data['new_start'] is not None:
-                    services[self.service_key]['start_value'] = data['new_start']
-                    save_settings()
-
-                # Обновляем флаги оплаты
-                if pay_consumption:
-                    data['is_consumption_paid'] = 1
-                if pay_norm:
-                    data['is_norm_paid'] = 1
-                if self.verification_id:
-                    update_verification(self.verification_id, data)
-
-                QMessageBox.information(self, "Успешно", "Поверка сохранена и оплачена")
+            QMessageBox.information(self, "Успешно", "Поверка сохранена и оплачена")
 
         super().accept()
 
@@ -2568,6 +2639,51 @@ class EditProviderDialog(QDialog):
         if self.service_key:
             set_service_provider(self.service_key, provider_id)
         super().accept()
+
+class PaymentConfirmationDialog(QDialog):
+    def __init__(self, items, service_name, parent=None):
+        from decimal import Decimal
+        """
+        items: список кортежей (описание, сумма) например [("Расход до снятия", 150.0), ("Сумма по нормативу", 200.0)]
+        service_name: название услуги (для отображения в заголовке)
+        """
+        super().__init__(parent)
+        self.setWindowTitle("Подтверждение оплаты")
+        self.setMinimumWidth(450)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Заголовок
+        layout.addWidget(QLabel(f"<b>Оплата за услугу: {service_name}</b>"))
+        layout.addWidget(QLabel("Будут оплачены:"))
+
+        # Список позиций
+        total = Decimal('0')
+        for desc, amount in items:
+            layout.addWidget(QLabel(f"  • {desc}: {amount:.2f} руб."))
+            total += Decimal(str(amount))
+
+        # Итоговая сумма
+        layout.addWidget(QLabel(f"<b>Итого без комиссии: {total:.2f} руб.</b>"))
+
+        # Чекбокс комиссии
+        self.fee_check = QCheckBox("Мой банк берёт комиссию")
+        layout.addWidget(self.fee_check)
+
+        # Кнопки
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+
+        self.total = total
+
+    def get_result(self):
+        """Возвращает словарь с общей суммой и флагом применения комиссии."""
+        return {
+            'total': self.total,
+            'apply_fee': self.fee_check.isChecked()
+        }
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
