@@ -1657,22 +1657,47 @@ class MeterReplacementDialog(QDialog):
         layout.addWidget(QLabel("Дата (необязательно, в формате ГГГГ-ММ-ДД):"))
         self.date_edit = QLineEdit()
         layout.addWidget(self.date_edit)
+        self.pay_consumption_check = QCheckBox("Оплатить расход по старому счётчику")
+        layout.addWidget(self.pay_consumption_check)
 
-        # --- ДОБАВЛЯЕМ ЧЕКБОКС ---
-        self.pay_checkbox = QCheckBox("Оплатить расход по старому счётчику")
-        layout.addWidget(self.pay_checkbox)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def ask_fee_percent(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Настройка комиссии банка")
+        dialog.setMinimumWidth(300)
+        dialog.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк:"))
+        percent_edit = QLineEdit()
+        layout.addWidget(percent_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                percent = float(percent_edit.text().strip())
+                if percent < 0 or percent > 100:
+                    raise ValueError
+                return percent
+            except:
+                QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
+                return None
+        return None
+
     def accept(self):
         from communal_calculator import normalize_decimal
-        from database import get_service_id_by_key, add_replacement, create_payment_record
+        from database import get_service_id_by_key, add_replacement, save_bill
         from config import services
-        from file_manager import load_settings, save_settings
+        from file_manager import save_settings
         from datetime import datetime
+        from decimal import Decimal
 
         try:
             old_final = float(normalize_decimal(self.old_edit.text()))
@@ -1694,64 +1719,89 @@ class MeterReplacementDialog(QDialog):
         # 1. Создаём запись о замене (как обычно)
         replacement_id = add_replacement(service_id, old_final, new_start, date_str)
 
-        # 2. Если чекбокс отмечен — оплачиваем расход по старому счётчику
-        if self.pay_checkbox.isChecked():
-            # Получаем текущее start_value услуги
+        # 2. --- Проверяем, нужно ли оплатить расход сразу ---
+        pay_consumption = self.pay_consumption_check.isChecked()
+        if pay_consumption:
+            # Получаем данные услуги
             service = services.get(self.service_key)
-            if service is None:
-                QMessageBox.warning(self, "Ошибка", "Услуга не найдена в конфигурации")
-                return
-            start_value = service.get("start_value", 0.0)
-            if start_value is None:
-                start_value = 0.0
-
-            # Расход по старому счётчику
-            consumption = old_final - start_value
-            if consumption < 0:
-                QMessageBox.warning(self, "Ошибка", "Показания старого счётчика меньше начальных")
+            if not service:
+                QMessageBox.warning(self, "Ошибка", "Услуга не найдена в config")
                 return
 
-            tariff = service.get("tariff", 0.0)
+            start_value = Decimal(service.get('start_value', 0))
+            old_final_dec = Decimal(old_final)
+            tariff = Decimal(service.get('tariff', 0))
+            fee = Decimal(service.get('fee', 0.0))
+
+            # Расход до замены
+            consumption = max(old_final_dec - start_value, Decimal('0'))
             amount = consumption * tariff
 
-            # Создаём платёж
-            try:
-                create_payment_record(
-                    service_key=self.service_key,
-                    amount=amount,
-                    consumption=consumption,
-                    start_reading=start_value,
-                    end_reading=old_final,
-                    tariff=tariff,
-                    fee=0.0,
-                    date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    replacement_ids=[replacement_id]  # помечаем эту замену оплаченной
-                )
-            except Exception as e:
-                QMessageBox.warning(self, "Ошибка", f"Не удалось сохранить платёж: {e}")
-                return
+            # Открываем диалог подтверждения
+            items = [("Расход до замены", float(amount))]
+            confirm = PaymentConfirmationDialog(items, service['name'], self)
+            if confirm.exec() != QDialog.Accepted:
+                return  # пользователь отменил
 
-            # Обновляем start_value на new_start
-            service["start_value"] = new_start
+            result = confirm.get_result()
+            apply_fee = result['apply_fee']
+
+            # Определяем процент комиссии
+            fee_percent = Decimal('0')
+            if apply_fee:
+                if fee == 0:
+                    percent = self.ask_fee_percent()
+                    if percent is None:
+                        return
+                    service['fee'] = percent / 100.0
+                    save_settings()
+                    fee_percent = Decimal(service['fee'])
+                else:
+                    fee_percent = fee
+
+            # Рассчитываем комиссию
+            fee_amount = amount * fee_percent if apply_fee else Decimal('0')
+            total = amount + fee_amount
+
+            # Формируем детали для save_bill
+            details = [{
+                'service_key': self.service_key,
+                'service_name': service['name'],
+                'start_reading': float(start_value),
+                'end_reading': float(old_final),
+                'consumption': float(consumption),
+                'tariff': float(tariff),
+                'amount': float(amount),
+                'fee': float(fee_amount),
+                'total': float(total)
+            }]
+
+            # Сохраняем в bills
+            bill_data = {
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'total_amount': float(amount),
+                'total_fee': float(fee_amount),
+                'total_with_fee': float(total),
+                'details': details,
+                'used_replacements': [replacement_id]
+            }
+            bill_id = save_bill(bill_data)
+
+            # Обновляем start_value услуги на new_start
+            services[self.service_key]['start_value'] = new_start
             save_settings()
 
-        # Перезагружаем услуги и обновляем интерфейс
-        load_settings()
-        if self.parent():
-            self.parent().rebuild_services_ui()
+            # Помечаем замену как оплаченную (is_paid=1)
+            from database import mark_replacements_paid
+            mark_replacements_paid([replacement_id], bill_id)
 
-        super().accept()
-            
-        #Обновляем интерфейс после сохранения замены
-        '''self.parent() — возвращает родительский виджет диалога (в данном случае это InputPanel, который вызвал диалог).
-
-            Проверка if self.parent(): — убеждается, что родитель существует (на случай, если диалог был создан без родителя).
-
-            self.parent().rebuild_services_ui() — вызывает метод rebuild_services_ui() у родителя. 
-            Этот метод перестраивает всю таблицу услуг в 
-            InputPanel (поля ввода, кнопки, чекбоксы) заново, используя свежие данные из config.services.'''
-        if self.parent():
-            self.parent().rebuild_services_ui()
+            QMessageBox.information(self, "Успешно", "Замена сохранена и оплачена")
+        else:
+            # Если оплата не требуется — просто обновляем интерфейс
+            from file_manager import load_settings
+            load_settings()
+            if self.parent():
+                self.parent().rebuild_services_ui()
 
         super().accept()
 
