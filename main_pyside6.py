@@ -1806,6 +1806,11 @@ class MeterReplacementDialog(QDialog):
         super().accept()
 
 
+class ClickToSelectLineEdit(QLineEdit):
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        self.selectAll()
+
 class VerificationDialog(QDialog):
     def __init__(self, service_key, verification_id=None, parent=None):
         super().__init__(parent)
@@ -1817,8 +1822,8 @@ class VerificationDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # --- Поля (как в MeterReplacementDialog + дополнительные) ---
-        self.old_edit = QLineEdit()
-        self.new_edit = QLineEdit()
+        self.old_edit = ClickToSelectLineEdit()
+        self.new_edit = ClickToSelectLineEdit()
         self.date_start_edit = QDateEdit()
         self.date_start_edit.setCalendarPopup(True)
         self.date_start_edit.setDisplayFormat("dd.MM.yyyy")
@@ -1831,7 +1836,7 @@ class VerificationDialog(QDialog):
         self.date_end_edit.setSpecialValueText("Не завершена")
         self.date_end_edit.setEnabled(False)
 
-        self.amount_norm_edit = QLineEdit()
+        self.amount_norm_edit = ClickToSelectLineEdit()
         self.next_verification_date_edit = QDateEdit()
         self.next_verification_date_edit.setCalendarPopup(True)
         self.next_verification_date_edit.setDisplayFormat("dd.MM.yyyy")
@@ -1902,7 +1907,7 @@ class VerificationDialog(QDialog):
         button_box.rejected.connect(self.reject)
         button_box.setStyleSheet(BUTTON_STYLE)
         layout.addWidget(button_box)
-
+ 
     def on_completed_toggled(self, checked):
         self.date_end_edit.setEnabled(checked)
         self.new_edit.setEnabled(checked)  # новые показания нужны только при завершении

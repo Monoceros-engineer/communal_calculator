@@ -240,14 +240,17 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
 
                 total_consumption = calculate_consumption_with_replacements(start, dec_replacements, end)
                 amount = total_consumption * Decimal(str(tariff))
+                # Добавляем норматив, если он есть
+                if key in norm_amounts:
+                    amount += norm_amounts[key]
+                # Теперь рассчитываем комиссию, если она есть   
                 if has_commission:
                     fee_amount = amount * Decimal(str(fee))
                 else:
                     fee_amount = Decimal('0')
+                # Ну и теперь добавляем комиссию к общей сумме
                 total = amount + fee_amount
-                # Добавляем норматив, если он есть
-                if key in norm_amounts:
-                    total += norm_amounts[key]
+                
                 # Сохраняем ID использованных замен (если они есть)
                 # Для этого нужно знать ID каждой замены. В текущей структуре service["replacements"] может содержать ID?
                 # В `load_services` мы загружаем замены с полем 'id'. Добавим его.
