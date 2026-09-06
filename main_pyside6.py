@@ -1346,9 +1346,9 @@ class ResultWindow(QDialog):
                 'end_reading': to_float(data.get("End value")),
                 'consumption': to_float(data.get("Consumption")),
                 'tariff': float(data["Tariff"]) if data["Tariff"] is not None else 0,
-                'amount': float(data["Amount"]),
-                'fee': float(data["Fee"]),
-                'total': float(data["Total"])
+                'amount': round(float(data["Amount"]), 2),
+                'fee': round(float(data["Fee"]), 2),
+                'total': round(float(data["Total"]), 2)
             })
 
         bill_data = {
@@ -1475,6 +1475,24 @@ class AddServiceDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        buttons.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(buttons)
 
         # Логика: при изменении типа скрывать/показывать поле начального значения
@@ -1573,9 +1591,28 @@ class EditServiceDialog(QDialog):
         self.enabled_check.setChecked(self.service.get("enabled", True))
         layout.addWidget(self.enabled_check)
 
+        #Кнопки
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        buttons.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(buttons)
 
         self.replace_button = QPushButton("Замена счётчика")
@@ -1661,9 +1698,28 @@ class MeterReplacementDialog(QDialog):
         layout.addWidget(self.pay_consumption_check)
 
 
+        #Кнопки
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        buttons.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(buttons)
 
     def ask_fee_percent(self):
@@ -1675,9 +1731,29 @@ class MeterReplacementDialog(QDialog):
         layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк:"))
         percent_edit = QLineEdit()
         layout.addWidget(percent_edit)
+
+        #Кнопки
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
+        buttons.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.Accepted:
@@ -1771,9 +1847,9 @@ class MeterReplacementDialog(QDialog):
                 'end_reading': float(old_final),
                 'consumption': float(consumption),
                 'tariff': float(tariff),
-                'amount': float(amount),
-                'fee': float(fee_amount),
-                'total': float(total)
+                'amount': round(float(amount), 2),
+                'fee': round(float(fee_amount), 2),
+                'total': round(float(total), 2)
             }]
 
             # Сохраняем в bills
@@ -1888,7 +1964,10 @@ class VerificationDialog(QDialog):
                     self.next_verification_date_edit.setDate(QDate.fromString(data['next_verification_date'], "yyyy-MM-dd"))
 
         # --- Кнопки ---
-        BUTTON_STYLE = ("""
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet("""
                     QPushButton {
                         background-color: #e0e0e0;
                         border: 1px solid #aaa;
@@ -1902,10 +1981,10 @@ class VerificationDialog(QDialog):
                         background-color: #a0a0a0;
                     }
                 """)
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
-        button_box.setStyleSheet(BUTTON_STYLE)
+        # --- Меняем названия кнопки Cancel ---
+        cancel_btn = button_box.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(button_box)
  
     def on_completed_toggled(self, checked):
@@ -1946,9 +2025,29 @@ class VerificationDialog(QDialog):
         layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк:"))
         percent_edit = QLineEdit()
         layout.addWidget(percent_edit)
+
+        #Кнопки
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
+        buttons.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.Accepted:
@@ -2067,9 +2166,9 @@ class VerificationDialog(QDialog):
                     'end_reading': float(old_final) if desc == "Расход до снятия" else None,
                     'consumption': float(amount_d / tariff) if desc == "Расход до снятия" else 0,
                     'tariff': float(tariff) if desc == "Расход до снятия" else 0,
-                    'amount': float(amount_d),
-                    'fee': float(fee_amount),
-                    'total': float(total_item)
+                    'amount': round(float(amount_d), 2),
+                    'fee': round(float(fee_amount), 2),
+                    'total': round(float(total_item), 2)
                 })
                 total_amount += amount_d
                 total_fee += fee_amount
@@ -2099,7 +2198,28 @@ class VerificationDialog(QDialog):
             if self.verification_id:
                 update_verification(self.verification_id, data)
 
-            QMessageBox.information(self, "Успешно", "Поверка сохранена и оплачена")
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Успешно")
+            msg.setText("Поверка сохранена и оплачена")
+            msg.setIcon(QMessageBox.Information)
+
+            # Применяем стиль ко всему диалогу, чтобы все кнопки внутри унаследовали
+            msg.setStyleSheet("""
+                QPushButton {
+                    background-color: #e0e0e0;
+                    border: 1px solid #aaa;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+                QPushButton:hover {
+                    background-color: #c0c0c0;
+                }
+                QPushButton:pressed {
+                    background-color: #a0a0a0;
+                }
+            """)
+
+            msg.exec()
 
         super().accept()
 
@@ -2435,9 +2555,28 @@ class SettingsWindow(QDialog):
         for key in available:
             combo.addItem(services[key]['name'], key)
         layout.addWidget(combo)
+
         btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btn_box.accepted.connect(dialog.accept)
         btn_box.rejected.connect(dialog.reject)
+        btn_box.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = btn_box.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(btn_box)
 
         if dialog.exec():
@@ -2729,6 +2868,24 @@ class PaymentConfirmationDialog(QDialog):
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet("""
+                    QPushButton {
+                        background-color: #e0e0e0;
+                        border: 1px solid #aaa;
+                        border-radius: 4px;
+                        padding: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #c0c0c0;
+                    }
+                    QPushButton:pressed {
+                        background-color: #a0a0a0;
+                    }
+                """)
+        #Меняем название кнопки Cancel
+        cancel_btn = button_box.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
         layout.addWidget(button_box)
 
         self.total = total

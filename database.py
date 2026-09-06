@@ -161,13 +161,18 @@ def save_bill(bill_data):
             VALUES (?, ?, ?, ?)
         """, (bill_data['date'], bill_data['total_amount'], bill_data['total_fee'], bill_data['total_with_fee']))
         bill_id = cursor.lastrowid
-        
+
         # Вставляем детали
         for detail in bill_data['details']:
             # Находим service_id по ключу (если услуга ещё существует)
             cursor.execute("SELECT id FROM services WHERE key = ?", (detail['service_key'],))
             row = cursor.fetchone()
             service_id = row[0] if row else None
+
+            # Округляем до 2 знаков
+            amount = round(detail['amount'], 2)
+            fee = round(detail['fee'], 2)
+            total = round(detail['total'], 2)
             
             cursor.execute("""
                 INSERT INTO bill_details (
@@ -177,7 +182,7 @@ def save_bill(bill_data):
             """, (
                 bill_id, service_id, detail['service_name'],
                 detail['start_reading'], detail['end_reading'], detail['consumption'],
-                detail['tariff'], detail['amount'], detail['fee'], detail['total']
+                detail['tariff'], amount, fee, total
             ))
         
         # Связываем замены с этим счётом, если есть
