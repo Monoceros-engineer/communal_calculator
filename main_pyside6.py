@@ -519,6 +519,9 @@ class MainWindow(QMainWindow):
         # Переключение: кнопка на дашборде переводит на ввод
         self.dashboard.go_to_input.connect(lambda: self.stacked.setCurrentIndex(1))
 
+        # Проверяем приближающиеся поверки
+        self.check_verifications()
+
         # По умолчанию показываем дашборд
         self.stacked.setCurrentIndex(0)
         
@@ -580,6 +583,33 @@ class MainWindow(QMainWindow):
             webbrowser.open(help_path)
         else:
             QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+
+    def check_verifications(self):
+        from datetime import datetime, timedelta
+
+        notifications = []
+        today = datetime.now().date()
+
+        for key, service in config.services.items():
+            # Проверяем только услуги по счётчику
+            if service.get("type") != "metered":
+                continue
+
+            next_date_str = service.get('next_verification_date')
+            if not next_date_str:
+                continue
+
+            try:
+                next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
+                days_left = (next_date - today).days
+                if 0 <= days_left <= 30:
+                    notifications.append(f"• {service['name']} — {days_left} дн.")
+            except:
+                continue
+
+        if notifications:
+            msg = "⚠️ Внимание! Приближается поверка счётчиков:\n\n" + "\n".join(notifications)
+            QMessageBox.information(self, "Напоминание о поверке", msg)
 
     def open_statistics(self):
         dialog = StatisticsWindow(self)
@@ -2197,6 +2227,9 @@ class VerificationDialog(QDialog):
                 data['is_norm_paid'] = 1
             if self.verification_id:
                 update_verification(self.verification_id, data)
+
+            from file_manager import load_settings
+            load_settings()
 
             msg = QMessageBox(self)
             msg.setWindowTitle("Успешно")

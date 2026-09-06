@@ -378,6 +378,18 @@ def load_services():
                     'is_paid': bool(is_paid)
                 }
 
+        # --- Загружаем дату следующей поверки для каждой услуги ---
+        for key in services:
+            active = services[key].get('active_verification')
+            if active and active.get('next_verification_date'):
+                services[key]['next_verification_date'] = active['next_verification_date']
+            else:
+                last = services[key].get('last_completed_verification')
+                if last and last.get('next_verification_date'):
+                    services[key]['next_verification_date'] = last['next_verification_date']
+                else:
+                    services[key]['next_verification_date'] = None
+
     return services
 
 # ===== ЗАМЕНЫ =====
