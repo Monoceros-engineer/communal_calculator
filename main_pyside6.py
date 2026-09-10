@@ -154,6 +154,7 @@ class WelcomeWindow(QDialog):
         self.setFixedSize(500, 400)
         self.setWindowFlags(Qt.FramelessWindowHint)  # убираем рамку (опционально)
         self.setModal(True)
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         # Определяем сезон для фона
         season = get_season_by_date()
@@ -266,6 +267,7 @@ class FirstRunWizard(QDialog):
         self.setWindowTitle("Настройка услуг")
         self.setModal(True)
         self.setMinimumSize(600, 500)
+        self.setWindowIcon(QIcon(resource_path("icon.ico")))
 
         # Определяем сезон для фона
         season = get_season_by_date()

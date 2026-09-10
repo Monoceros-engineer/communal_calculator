@@ -1,9 +1,9 @@
-; Скрипт для установки Калькулятора коммуналки (версия 1.2)
+; Скрипт для установки Калькулятора коммуналки (версия 1.3)
 ; Сборка через Nuitka, папка main_pyside6.dist
 
 [Setup]
 AppName=Калькулятор коммуналки
-AppVersion=1.2
+AppVersion=1.3
 AppPublisher=Monoceros-engineer
 AppPublisherURL=https://github.com/Monoceros-engineer/communal_calculator
 AppSupportURL=https://github.com/Monoceros-engineer/communal_calculator
@@ -18,7 +18,7 @@ UninstallDisplayIcon={app}\main_pyside6.exe
 Compression=lzma2
 SolidCompression=yes
 OutputDir=Output
-OutputBaseFilename=CommunalCalculator_Setup_v1.2
+OutputBaseFilename=CommunalCalculator_Setup_v1.3
 
 ; Иконка установщика
 SetupIconFile=icon.ico
@@ -60,38 +60,17 @@ Filename: "{app}\main_pyside6.exe"; Description: "Запустить прогр�
 ; ======================================================================
 
 [Code]
-var
-  DeleteDataPage: TInputOptionWizardPage;
-
-procedure InitializeWizard;
-begin
-  // Создаём страницу с галочкой для деинсталляции (она появится только при удалении)
-  DeleteDataPage := CreateInputOptionPage(wpSelectTasks,
-    'Удаление данных',
-    'Удалить сохранённые данные?',
-    'При удалении программы вы можете также удалить папку с вашими сохранениями (база данных, настройки).' + #13#10#13#10 +
-    'Если вы планируете переустановить программу, оставьте данные, чтобы не потерять историю.',
-    True, False);
-  DeleteDataPage.Add('Удалить папку %APPDATA%\CommunalCalculator (включая базу данных communal.db)');
-end;
-
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataPath: string;
 begin
   if CurUninstallStep = usUninstall then
   begin
-    // Проверяем, поставлена ли галочка
-    if DeleteDataPage.Values[0] then
+    if MsgBox('Удалить сохранённые данные (базу данных и настройки)?', mbConfirmation, MB_YESNO) = IDYES then
     begin
       DataPath := ExpandConstant('{userappdata}\CommunalCalculator');
       if DirExists(DataPath) then
-      begin
-        if DelTree(DataPath, True, True, True) then
-          MsgBox('Папка с сохранениями удалена.', mbInformation, MB_OK)
-        else
-          MsgBox('Не удалось полностью удалить папку с сохранениями. Проверьте, не запущена ли программа.', mbError, MB_OK);
-      end;
+        DelTree(DataPath, True, True, True);
     end;
   end;
 end;
