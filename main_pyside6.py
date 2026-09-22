@@ -1981,8 +1981,8 @@ class VerificationDialog(QDialog):
             from database import get_verification_by_id
             data = get_verification_by_id(verification_id)
             if data:
-                self.old_edit.setText(str(data.get('old_final', '')))
-                self.new_edit.setText(str(data.get('new_start', '')))
+                self.old_edit.setText(str(data['old_final']) if data.get('old_final') is not None else '')
+                self.new_edit.setText(str(data['new_start']) if data.get('new_start') is not None else '')
                 self.date_start_edit.setDate(QDate.fromString(data['date_start'], "yyyy-MM-dd"))
                 self.pay_consumption_check.setChecked(data.get('is_consumption_paid', False))
                 self.pay_norm_check.setChecked(data.get('is_norm_paid', False))
@@ -1991,7 +1991,7 @@ class VerificationDialog(QDialog):
                     self.completed_check.setChecked(True)
                 else:
                     self.completed_check.setChecked(False)
-                self.amount_norm_edit.setText(str(data.get('amount_norm', '')))
+                self.amount_norm_edit.setText(str(data['amount_norm']) if data.get('amount_norm') is not None else '')
                 if data.get('next_verification_date'):
                     self.next_verification_date_edit.setDate(QDate.fromString(data['next_verification_date'], "yyyy-MM-dd"))
 
@@ -2028,25 +2028,38 @@ class VerificationDialog(QDialog):
             self.new_edit.clear()
 
     def get_data(self):
-        old_final = self.old_edit.text().strip()
-        new_start = self.new_edit.text().strip() if self.completed_check.isChecked() else None
+        def to_float(value):
+            if value is None:
+                return None
+            s = str(value).strip()
+            if s == '' or s.lower() == 'none':
+                return None
+            try:
+                return float(s.replace(',', '.'))
+            except ValueError:
+                return None
+
+        old_final = self.old_edit.text()
+        new_start = self.new_edit.text() if self.completed_check.isChecked() else None
         date_start = self.date_start_edit.date().toString("yyyy-MM-dd")
         if self.completed_check.isChecked():
             date_end = self.date_end_edit.date().toString("yyyy-MM-dd")
         else:
             date_end = None
-        amount_norm = self.amount_norm_edit.text().strip()
-        next_verification_date = self.next_verification_date_edit.date().toString("yyyy-MM-dd") if not self.next_verification_date_edit.date().isNull() else None
+        amount_norm = self.amount_norm_edit.text()
+        next_verification_date = (
+            self.next_verification_date_edit.date().toString("yyyy-MM-dd")
+            if not self.next_verification_date_edit.date().isNull() else None
+        )
 
-        data = {
-            'old_final': float(old_final) if old_final else None,
-            'new_start': float(new_start) if new_start else None,
+        return {
+            'old_final': to_float(old_final),
+            'new_start': to_float(new_start),
             'date_start': date_start,
             'date_end': date_end,
-            'amount_norm': float(amount_norm) if amount_norm else None,
+            'amount_norm': to_float(amount_norm),
             'next_verification_date': next_verification_date,
         }
-        return data
 
     def ask_fee_percent(self):
         dialog = QDialog(self)
@@ -2101,6 +2114,14 @@ class VerificationDialog(QDialog):
         from datetime import datetime
 
         data = self.get_data()
+        # Валидация полей при завершении поверки
+        if self.completed_check.isChecked():
+            if data.get('date_end') is None:
+                QMessageBox.warning(self, "Ошибка", "Укажите дату установки счётчика обратно")
+                return
+            if data.get('new_start') is None:
+                QMessageBox.warning(self, "Ошибка", "Укажите показания счётчика на момент установки")
+                return
         # Валидация
         if not data['date_start']:
             QMessageBox.warning(self, "Ошибка", "Дата снятия счётчика обязательна")
