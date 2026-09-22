@@ -570,6 +570,7 @@ class MainWindow(QMainWindow):
     def open_settings(self):
         dialog = SettingsWindow(config.services, refresh_callback=None, parent=self)
         if dialog.exec() == QDialog.Accepted:
+            load_settings() # ← перезагружаем объекты из БД
             self.dashboard.update_data()#Обновление дашборда
             if hasattr(self, 'input_panel'):
                 self.input_panel.rebuild_services_ui() # обновляем форму ввода
@@ -2994,6 +2995,7 @@ if __name__ == "__main__":
         wizard = FirstRunWizard()
         if wizard.exec() != QDialog.Accepted:
             sys.exit(0)
+        load_settings() # ← перезагружаем config.services из БД как объекты
         # после мастера услуги добавлены
 
     # Запускаем главное окно

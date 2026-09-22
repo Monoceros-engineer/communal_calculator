@@ -2,13 +2,7 @@ from calculator import calculate_service, calculate_fixed_service
 import config
 from file_manager import save_settings
 from decimal import Decimal, InvalidOperation
-
-def normalize_decimal(s):
-    """Преобразует строку с запятой или точкой в формат с точкой."""
-    s = s.strip().replace(',', '.')
-    # удаляем возможные пробелы между цифрами
-    s = s.replace(' ', '')
-    return s
+from calculations import normalize_decimal, calculate_consumption_with_replacements
 
 def get_services():
     """Возвращает словарь services со всеми параметрами."""
@@ -21,30 +15,6 @@ def get_start_values():
         "electricity": config.services["electricity"]["start_value"],
         "water": config.services["water"]["start_value"]
     }
-
-def calculate_consumption_with_replacements(start_value, replacements, current_reading):
-    """
-    Рассчитывает общий расход ресурса с учётом замен счётчиков.
-    start_value: показания на начало периода (последние оплаченные)
-    replacements: список замен, каждая: {'old_final': float, 'new_start': float, 'date': str (optional)}
-    current_reading: текущее показание (последнее введённое)
-    Возвращает общий расход (float).
-    """
-    total = Decimal('0')
-    last = start_value
-    # Сортируем замены по дате, если даты нет, то по порядку добавления (оставляем как есть)
-    # Для простоты сортируем по 'date', если поле отсутствует, ставим пустую строку
-    sorted_reps = sorted(replacements, key=lambda x: x.get('date', ''))
-    for rep in sorted_reps:
-        old_final = rep['old_final']
-        new_start = rep['new_start']
-        if old_final < last:
-            # некорректные данные, но можно просто пропустить или добавить 0
-            continue
-        total += old_final - last
-        last = new_start
-    total += current_reading - last
-    return total
 
 def get_tariffs():
     """Возвращает словарь с текущими тарифами."""
@@ -163,133 +133,36 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
     total_fee = Decimal('0')
     total_sum_with_fee = Decimal('0')
     used_replacement_ids = [] 
-    norm_amounts = {}
     verification_ids_used = []   # для ID поверок, где расход был использован
     norm_verification_ids = []   # для ID поверок, где норматив был использован
 
     for key, service in config.services.items():
         if not service.get("enabled", True):
             continue
-        name = service["name"]
-        service_type = service["type"]
-        tariff = Decimal(str(service["tariff"]))
-        fee = Decimal(str(service.get('fee', 0.0)))
+        reading = readings.get(key, '')
         has_commission = commissions.get(key, False)
-
-        if service_type == "metered":
-            # --- 1. Активная поверка (счётчик на поверке) ---
-            active_verification = service.get('active_verification')
-            if active_verification:
-                amount_norm = Decimal(str(active_verification.get('amount_norm') or 0.0))
-                fee = Decimal(str(service.get('fee', 0.0)))
-                fee_amount = amount_norm * fee if has_commission else Decimal('0')
-                total = amount_norm + fee_amount
-                result = {
-                    "Key": key,
-                    "Name": name + " (норматив)",
-                    "Start value": None,
-                    "End value": None,
-                    "Consumption": 0,
-                    "Tariff": None,
-                    "Amount": amount_norm,
-                    "Fee": fee_amount,
-                    "Total": total
-                }
-                results_data.append(result)
-                costs[key] = amount_norm
-                total_amount += amount_norm
-                total_fee += fee_amount
-                total_sum_with_fee += total
-                continue  # пропускаем обычный расчёт
-
-            # --- 2. Обычный расчёт по показаниям ---
-            value_str = readings.get(key, "").strip()
-            if not value_str:
-                continue
-            normalized = normalize_decimal(value_str)
-            try:
-                end = Decimal(normalized)
-                start = Decimal(service.get("start_value", 0))
-                replacements = service.get("replacements", [])
-                dec_replacements = []
-                for rep in replacements:
-                    if not rep.get('is_paid', False):   # добавляем только неоплаченные замены
-                        dec_replacements.append({
-                            "old_final": Decimal(rep["old_final"]),
-                            "new_start": Decimal(rep["new_start"])
-                        })
-
-                # === ДОБАВЛЕНО ДЛЯ ПОВЕРКИ ===
-                # Проверяем завершённую поверку (если есть и не оплачена)
-                last_verif = service.get('last_completed_verification')
-                if last_verif:
-                    # Расход до снятия — если не оплачен
-                    if not last_verif.get('is_consumption_paid', False):
-                        dec_replacements.append({
-                            "old_final": Decimal(last_verif['old_final']),
-                            "new_start": Decimal(last_verif['new_start'])
-                        })
-                        verification_ids_used.append(last_verif['id'])
-                    # Норматив — если не оплачен
-                    if not last_verif.get('is_norm_paid', False):
-                        norm_amount = Decimal(str(last_verif.get('amount_norm') or 0))
-                        if norm_amount:
-                            norm_amounts[key] = norm_amount
-                            norm_verification_ids.append(last_verif['id'])   # запоминаем ID
-                # === КОНЕЦ ДОБАВЛЕННОГО БЛОКА ===
-
-                total_consumption = calculate_consumption_with_replacements(start, dec_replacements, end)
-                amount = total_consumption * Decimal(str(tariff))
-                # Добавляем норматив, если он есть
-                if key in norm_amounts:
-                    amount += norm_amounts[key]
-                # Теперь рассчитываем комиссию, если она есть   
-                if has_commission:
-                    fee_amount = amount * Decimal(str(fee))
-                else:
-                    fee_amount = Decimal('0')
-                # Ну и теперь добавляем комиссию к общей сумме
-                total = amount + fee_amount
-                
-                # Сохраняем ID использованных замен (если они есть)
-                # Для этого нужно знать ID каждой замены. В текущей структуре service["replacements"] может содержать ID?
-                # В `load_services` мы загружаем замены с полем 'id'. Добавим его.
-                # Пока допустим, что replacements содержит словари с 'id'.
-                # В будущем нужно, чтобы `load_services` добавляла id.
-                for rep in replacements:
-                    if 'id' in rep:
-                        used_replacement_ids.append(rep['id'])
-            except InvalidOperation:
-                if error_callback:
-                    error_callback(name, "Введите корректное число!")
-                else:
-                    raise ValueError(f"В поле '{name}' введите корректное число!")
-                return None
-            result = {
-                "Key": key,
-                "Name": name,
-                "Start value": start,
-                "End value": end,
-                "Consumption": total_consumption,
-                "Tariff": tariff,
-                "Amount": amount,
-                "Fee": fee_amount,
-                "Total": total
-            }
-            results_data.append(result)
-            current_readings[key] = float(end)
-            costs[key] = amount
-            total_amount += amount
-            total_fee += fee_amount
-            total_sum_with_fee += total
-        else:  # fixed
-            result = calculate_fixed_service(name, tariff, has_commission, fee)
-            result["Key"] = key
-            results_data.append(result)
-            costs[key] = result["Amount"]
-            total_amount += result["Amount"]
-            total_fee += result["Fee"]
-            total_sum_with_fee += result["Total"]
+        try:
+            calc = service.calculate(reading, has_commission)
+        except InvalidOperation:
+            if error_callback:
+                error_callback(service["name"], "Введите корректное число!")
+            else:
+                raise ValueError(f"В поле '{service['name']}' введите корректное число!")
+            return None
+        if calc is None:
+            continue
+        result = calc['result']
+        result['Key'] = key
+        results_data.append(result)
+        if calc['current_reading'] is not None:
+            current_readings[key] = calc['current_reading']
+        costs[key] = calc['cost']
+        total_amount += calc['amount']
+        total_fee += calc['fee']
+        total_sum_with_fee += calc['total']
+        used_replacement_ids.extend(calc['used_replacement_ids'])
+        verification_ids_used.extend(calc['verification_ids_used'])
+        norm_verification_ids.extend(calc['norm_verification_ids'])
 
     if not results_data:
         if warning_callback:
