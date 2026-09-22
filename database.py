@@ -1,6 +1,7 @@
 import sqlite3
 import json
 from paths import get_db_path   # импортируем из paths
+from services import BaseService, MeteredService, FixedService
 
 # Путь к базе данных – используем функцию из paths
 DB_PATH = get_db_path()
@@ -300,7 +301,7 @@ def load_services():
         rows = cursor.fetchall()
         for row in rows:
             id_, key, name, type_, enabled, tariff, fee, start_value, provider_id = row
-            services[key] = {
+            data = {
                 'id': id_,
                 'name': name,
                 'type': type_,
@@ -309,12 +310,15 @@ def load_services():
                 'fee': fee,
                 'start_value': start_value,
                 'provider_id': provider_id,
-                'replacements': [],
-                'last_completed_verification': None   # ← добавляем поле
             }
+            services[key] = BaseService.from_dict(data, key=key)
 
         # --- Загружаем замены ---
-        cursor.execute("SELECT id, service_id, old_final, new_start, date, is_paid FROM meter_replacements")
+        cursor.execute("""
+                            SELECT id, service_id, old_final, new_start, date, is_paid 
+                            FROM meter_replacements
+                            WHERE type = 'replacement' OR type IS NULL
+                        """)
         replacements_rows = cursor.fetchall()
         cursor.execute("SELECT id, key FROM services")
         id_to_key = {row[0]: row[1] for row in cursor.fetchall()}

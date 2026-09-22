@@ -118,6 +118,10 @@ class BaseService:
         """Совместимость со словарём: service.get('fee', 0.0)."""
         return getattr(self, item, default)
 
+    def __contains__(self, item):
+        """Совместимость со словарём: 'fee' in service → True, если поле есть."""
+        return hasattr(self, item)
+
     def __repr__(self):
         return f"{type(self).__name__}(key={self.key!r}, name={self.name!r})"
 
