@@ -3,6 +3,7 @@
 build/
 dist/
 Output/
+.codewhale/
 *.exe
 *.msi
 help.html
