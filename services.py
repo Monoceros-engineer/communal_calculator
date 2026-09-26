@@ -17,6 +17,24 @@ from decimal import Decimal, InvalidOperation
 from calculations import normalize_decimal, calculate_consumption_with_replacements
 
 
+# Стиль серых кнопок («Счётчик», «Реквизиты») — та же строка, что и раньше в
+# InputPanel. Храним как обычную строку, чтобы не импортировать PySide6 на уровне модуля.
+_GREY_BUTTON_STYLE = """
+    QPushButton {
+        background-color: #e0e0e0;
+        border: 1px solid #aaa;
+        border-radius: 4px;
+        padding: 4px;
+    }
+    QPushButton:hover {
+        background-color: #c0c0c0;
+    }
+    QPushButton:pressed {
+        background-color: #a0a0a0;
+    }
+"""
+
+
 class BaseService:
     """Базовый класс услуги: общие поля и сериализация.
 
@@ -26,7 +44,7 @@ class BaseService:
     SERVICE_TYPE = None
 
     def __init__(self, key=None, *, id=None, name="", enabled=True, tariff=0.0,
-                 fee=0.0, start_value=None, provider_id=None, replacements=None,
+                 fee=None, start_value=None, provider_id=None, replacements=None,
                  active_verification=None, last_completed_verification=None,
                  next_verification_date=None):
         self.key = key
@@ -64,7 +82,7 @@ class BaseService:
             name=data.get("name", ""),
             enabled=data.get("enabled", True),
             tariff=data.get("tariff", 0.0),
-            fee=data.get("fee", 0.0),
+            fee=data.get("fee"),
             start_value=data.get("start_value"),
             provider_id=data.get("provider_id"),
             replacements=data.get("replacements"),
@@ -134,6 +152,86 @@ class BaseService:
         или None, если услугу нужно пропустить.
         """
         raise NotImplementedError
+
+    def render_input_row(self, parent_widget):
+        """Вернуть виджеты строки ввода для InputPanel. Реализуется в подклассах.
+
+        Возвращает словарь с ключами:
+            name_label, value_widget, commission_cb, action_widget,
+            provider_btn, entry, checkbox
+        """
+        raise NotImplementedError
+
+    # --- Общие части строки ввода (общие для metered и fixed) ---
+
+    def _build_name_label(self):
+        from PySide6.QtWidgets import QLabel
+
+        tariff = self.tariff if self.tariff is not None else 0.0
+        name_label = QLabel(f"<b>{self.name.upper()}</b> (тариф {tariff: .2f})")
+        name_label.setWordWrap(True)  # Перенос длинных слов
+        return name_label
+
+    def _build_commission_cb(self, parent_widget):
+        from PySide6.QtWidgets import (
+            QCheckBox, QDialog, QVBoxLayout, QLabel, QLineEdit,
+            QDialogButtonBox, QMessageBox)
+        from communal_calculator import save_services
+
+        cb = QCheckBox()
+        if self.fee is not None:
+            cb.setText(f"{int(self.fee * 100)}%")
+        else:
+            cb.setText("Мой банк берёт комиссию")
+
+        def on_checkbox_toggled(checked):
+            if not checked:
+                return
+            if self.fee is not None:
+                return
+            # Комиссия не задана – открываем диалог
+            dialog = QDialog(parent_widget)
+            dialog.setStyleSheet("background-color: white;")  # белый фон окна
+            dialog.setWindowTitle("Настройка комиссии банка")
+            dialog.setMinimumWidth(300)
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:"))
+            percent_edit = QLineEdit()
+            layout.addWidget(percent_edit)
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            if dialog.exec():
+                try:
+                    percent = float(percent_edit.text())
+                    if percent < 0 or percent > 100:
+                        raise ValueError
+                    self.fee = percent / 100.0
+                    save_services()
+                    cb.setText(f"{int(percent)}%")
+                except:
+                    QMessageBox.warning(parent_widget, "Ошибка", "Введите число от 0 до 100")
+                    cb.blockSignals(True)
+                    cb.setChecked(False)
+                    cb.blockSignals(False)
+            else:
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
+
+        cb.toggled.connect(on_checkbox_toggled)
+        return cb
+
+    def _build_provider_btn(self, parent_widget):
+        from PySide6.QtWidgets import QPushButton
+
+        provider_btn = QPushButton("🏦 Реквизиты")
+        provider_btn.setFixedWidth(130)
+        provider_btn.setStyleSheet(_GREY_BUTTON_STYLE)
+        provider_btn.clicked.connect(
+            lambda checked, k=self.key: parent_widget.show_provider_info(k))
+        return provider_btn
 
     def __repr__(self):
         return f"{type(self).__name__}(key={self.key!r}, name={self.name!r})"
@@ -254,6 +352,33 @@ class MeteredService(BaseService):
             'norm_verification_ids': norm_verification_ids,
         }
 
+    def render_input_row(self, parent_widget):
+        """Строка ввода для услуги по счётчику: QLineEdit + кнопка «Счётчик»."""
+        from PySide6.QtWidgets import QLineEdit, QPushButton
+
+        name_label = self._build_name_label()
+        entry = QLineEdit()
+        entry.setFixedWidth(200)  # фиксированная ширина
+        commission_cb = self._build_commission_cb(parent_widget)
+
+        counter_btn = QPushButton("🔧 Счётчик")
+        counter_btn.setFixedWidth(130)
+        counter_btn.setStyleSheet(_GREY_BUTTON_STYLE)
+        counter_btn.clicked.connect(
+            lambda checked, k=self.key: parent_widget.show_counter_actions(k))
+
+        provider_btn = self._build_provider_btn(parent_widget)
+
+        return {
+            "name_label": name_label,
+            "value_widget": entry,
+            "commission_cb": commission_cb,
+            "action_widget": counter_btn,
+            "provider_btn": provider_btn,
+            "entry": entry,
+            "checkbox": commission_cb,
+        }
+
 
 class FixedService(BaseService):
     """Услуга с фиксированной платой (не зависит от показаний)."""
@@ -266,8 +391,11 @@ class FixedService(BaseService):
 
         # tariff передаём как Decimal(str(...)) — так делал старый код
         # (process_services_data), чтобы в result['Tariff'] лежал Decimal.
+        # fee=None трактуем как 0, иначе calculate_fixed_service упадёт на
+        # Decimal(str(None)).
+        fee = self.fee if self.fee is not None else 0.0
         result = calculate_fixed_service(
-            self.name, Decimal(str(self.tariff)), has_commission, self.fee)
+            self.name, Decimal(str(self.tariff)), has_commission, fee)
         amount = Decimal(str(result['Amount']))
         fee_amount = Decimal(str(result['Fee']))
         return {
@@ -280,4 +408,26 @@ class FixedService(BaseService):
             'used_replacement_ids': [],
             'verification_ids_used': [],
             'norm_verification_ids': [],
+        }
+
+    def render_input_row(self, parent_widget):
+        """Строка ввода для фиксированной услуги: метка вместо поля и пустая метка вместо кнопки."""
+        from PySide6.QtWidgets import QLabel
+        from PySide6.QtCore import Qt
+
+        name_label = self._build_name_label()
+        label = QLabel("Показания счетчика не требуются")
+        label.setFixedWidth(200)
+        label.setAlignment(Qt.AlignCenter)  # Выравниваем по центру
+        commission_cb = self._build_commission_cb(parent_widget)
+        provider_btn = self._build_provider_btn(parent_widget)
+
+        return {
+            "name_label": name_label,
+            "value_widget": label,
+            "commission_cb": commission_cb,
+            "action_widget": QLabel(""),
+            "provider_btn": provider_btn,
+            "entry": None,
+            "checkbox": commission_cb,
         }

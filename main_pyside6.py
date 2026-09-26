@@ -42,6 +42,7 @@ try:
     )
     from file_manager import load_settings
     from config import services  # или import config, затем использовать config.services
+    from services import BaseService
     import random
 except Exception as e:
     print("Import error:", e)
@@ -926,133 +927,42 @@ class InputPanel(QWidget):
         header_info = QLabel("<b>Информация</b>")
         self.grid_layout.addWidget(header_info, 0, 4)
 
+        # Настройка растяжения колонок
+        self.grid_layout.setColumnStretch(0, 1)  # первая колонка растягивается
+        self.grid_layout.setColumnStretch(1, 0)  # вторая – фиксированной ширины
+        self.grid_layout.setColumnStretch(2, 0)  # третья – фиксированной ширины
+        self.grid_layout.setColumnStretch(3, 0)  # для кнопки действия
+        self.grid_layout.setColumnStretch(4, 0)  # для кнопки реквизитов
+
         row = 1
         # Проходим по всем услугам из config
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
-            # Название услуги с тарифом
-            name = service["name"]
-            tariff = service.get("tariff", 0.0)
-            name_text = f"<b>{name.upper()}</b> (тариф {tariff: .2f})"
-            name_label = QLabel(name_text)
-            name_label.setWordWrap(True)  # Перенос длинных слов
+            # Если в config.services оказался обычный словарь (например, после
+            # AddServiceDialog/EditServiceDialog) — превращаем его в объект,
+            # чтобы работал render_input_row().
+            if not isinstance(service, BaseService):
+                service = BaseService.from_dict(service, key=key)
+                config.services[key] = service
+
+            widgets = service.render_input_row(self)
+
+            self.grid_layout.addWidget(widgets["name_label"], row, 0)
+            self.grid_layout.addWidget(widgets["value_widget"], row, 1)
             self.grid_layout.addWidget(
-                name_label, row, 0
-            )  # Размещаем название услуги в сетке в первом столбце
+                widgets["commission_cb"], row, 2, alignment=Qt.AlignCenter)
+            self.grid_layout.addWidget(
+                widgets["action_widget"], row, 3, alignment=Qt.AlignCenter)
+            self.grid_layout.addWidget(
+                widgets["provider_btn"], row, 4, alignment=Qt.AlignCenter)
 
-            # Поле ввода или метка для фиксированных услуг
-            if service["type"] == "metered":
-                entry = QLineEdit()
-                entry.setFixedWidth(200)  # фиксированная ширина
-                self.grid_layout.addWidget(
-                    entry, row, 1
-                )  # Размещаем окно ввода в сетке во втором столбце
-                self.entries[key] = entry
-            else:
-                label = QLabel("Показания счетчика не требуются")
-                label.setFixedWidth(200)
-                label.setAlignment(Qt.AlignCenter)  # Выравниваем по центру
-                self.grid_layout.addWidget(
-                    label, row, 1
-                )  # Размещаем виджет в сетке во втором столбце
-
-            # Чекбокс комиссии
-            cb = QCheckBox()
-            fee = service.get('fee')  # может быть None или число
-            if fee is not None:
-                cb.setText(f"{int(fee*100)}%")
-            else:
-                cb.setText("Мой банк берёт комиссию")
-
-            def on_checkbox_toggled(checked, key=key, cb=cb, service=service):
-                if not checked:
-                    return
-                if service.get('fee') is not None:
-                    return
-                # Комиссия не задана – открываем диалог
-                dialog = QDialog(self)
-                dialog.setStyleSheet("background-color: white;")#Прописываем белый фон окна (так как по умолчанию он черный)
-                dialog.setWindowTitle("Настройка комиссии банка")
-                dialog.setMinimumWidth(300)
-                layout = QVBoxLayout(dialog)
-                layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:"))
-                percent_edit = QLineEdit()
-                layout.addWidget(percent_edit)
-                buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-                buttons.accepted.connect(dialog.accept)
-                buttons.rejected.connect(dialog.reject)
-                layout.addWidget(buttons)
-                if dialog.exec():
-                    try:
-                        percent = float(percent_edit.text())
-                        if percent < 0 or percent > 100:
-                            raise ValueError
-                        service['fee'] = percent / 100.0
-                        save_services()
-                        cb.setText(f"{int(percent)}%")
-                    except:
-                        QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
-                        cb.blockSignals(True)
-                        cb.setChecked(False)
-                        cb.blockSignals(False)
-                else:
-                    cb.blockSignals(True)
-                    cb.setChecked(False)
-                    cb.blockSignals(False)
-
-            cb.toggled.connect(on_checkbox_toggled)
-            self.checkboxes[key] = cb
-            self.grid_layout.addWidget(cb, row, 2, alignment=Qt.AlignCenter)
-
-            if service["type"] == "metered":
-                counter_btn = QPushButton("🔧 Счётчик")
-                counter_btn.setFixedWidth(130)
-                counter_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e0e0e0;
-                        border: 1px solid #aaa;
-                        border-radius: 4px;
-                        padding: 4px;
-                    }
-                    QPushButton:hover {
-                        background-color: #c0c0c0;
-                    }
-                    QPushButton:pressed {
-                        background-color: #a0a0a0;
-                    }
-                """)
-                counter_btn.clicked.connect(lambda checked, k=key: self.show_counter_actions(k))
-                self.grid_layout.addWidget(counter_btn, row, 3, alignment=Qt.AlignCenter)
-            else:
-                self.grid_layout.addWidget(QLabel(""), row, 3)
-            # Кнопки реквизитов
-            provider_btn = QPushButton("🏦 Реквизиты")
-            provider_btn.setFixedWidth(130)
-            provider_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e0e0e0;
-                        border: 1px solid #aaa;
-                        border-radius: 4px;
-                        padding: 4px;
-                    }
-                    QPushButton:hover {
-                        background-color: #c0c0c0;
-                    }
-                    QPushButton:pressed {
-                        background-color: #a0a0a0;
-                    }
-                """)
-            provider_btn.clicked.connect(lambda checked, k=key: self.show_provider_info(k))
-            self.grid_layout.addWidget(provider_btn, row, 4, alignment=Qt.AlignCenter)
+            if widgets["entry"] is not None:
+                self.entries[key] = widgets["entry"]
+            self.checkboxes[key] = widgets["checkbox"]
 
             row += 1
 
-            # # Настраиваем растяжение колонок
-            self.grid_layout.setColumnStretch(0, 1)  # первая колонка растягивается
-            self.grid_layout.setColumnStretch(1, 0)  # вторая – фиксированной ширины
-            self.grid_layout.setColumnStretch(2, 0)  # третья – фиксированной ширины
-        
         # Добавляем растягивающуюся пустую строку
         self.grid_layout.setRowStretch(row, 1)
         # Для всех предыдущих строк (с услугами) устанавливаем растяжение 0
