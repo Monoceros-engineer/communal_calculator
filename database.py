@@ -55,6 +55,79 @@ def migrate_fee_nullable():
         print(f"Migration services.fee failed: {e}")
         raise
 
+def migrate_new_start_nullable():
+    """Миграция: делает колонку meter_replacements.new_start NULL-допустимой.
+
+    Для старых БД (new_start REAL NOT NULL) пересоздаёт таблицу без NOT NULL,
+    сохраняя все строки (id включительно). Проверка через PRAGMA table_info
+    делает пересоздание однократным и идемпотентным.
+    """
+    # Известный состав колонок (сверен с текущей схемой и с реальной БД
+    # через PRAGMA table_info). Лишние колонки — ошибка, чтобы не потерять
+    # данные молча.
+    KNOWN_COLS = {
+        "id", "service_id", "old_final", "new_start", "date", "is_paid",
+        "date_start", "date_end", "amount_norm", "next_verification_date",
+        "is_active", "type", "is_consumption_paid", "is_norm_paid"}
+    try:
+        # Проверяем, нужна ли миграция, и сверяем состав колонок
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(meter_replacements)")
+            cols = cursor.fetchall()
+        new_start_row = next((row for row in cols if row[1] == 'new_start'), None)
+        if new_start_row is None or new_start_row[3] == 0:  # таблицы нет или уже nullable
+            return
+
+        extra = {row[1] for row in cols} - KNOWN_COLS
+        if extra:
+            raise RuntimeError(
+                f"meter_replacements has unknown columns: {sorted(extra)}")
+
+        # Пересоздаём таблицу meter_replacements с new_start REAL (без NOT NULL)
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            cursor.execute("BEGIN")
+            cursor.execute("""
+                CREATE TABLE meter_replacements_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    service_id INTEGER NOT NULL,
+                    old_final REAL NOT NULL,
+                    new_start REAL,
+                    date TEXT,
+                    is_paid INTEGER NOT NULL DEFAULT 0,
+                    date_start TEXT,
+                    date_end TEXT,
+                    amount_norm REAL,
+                    next_verification_date TEXT,
+                    is_active INTEGER DEFAULT 0,
+                    type TEXT DEFAULT 'replacement',
+                    is_consumption_paid INTEGER DEFAULT 0,
+                    is_norm_paid INTEGER DEFAULT 0,
+                    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO meter_replacements_new
+                    (id, service_id, old_final, new_start, date, is_paid,
+                     date_start, date_end, amount_norm, next_verification_date,
+                     is_active, type, is_consumption_paid, is_norm_paid)
+                SELECT
+                     id, service_id, old_final, new_start, date, is_paid,
+                     date_start, date_end, amount_norm, next_verification_date,
+                     is_active, type, is_consumption_paid, is_norm_paid
+                FROM meter_replacements
+            """)
+            cursor.execute("DROP TABLE meter_replacements")
+            cursor.execute("ALTER TABLE meter_replacements_new RENAME TO meter_replacements")
+            conn.commit()
+            cursor.execute("PRAGMA foreign_keys = ON")
+        print("Migration: meter_replacements.new_start is now nullable.")
+    except Exception as e:
+        print(f"Migration meter_replacements.new_start failed: {e}")
+        raise
+
 def init_db():
     """Создаёт таблицы, если они не существуют."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -176,9 +249,11 @@ def init_db():
         cursor.execute("UPDATE meter_replacements SET type = 'replacement', is_active = 0 WHERE type IS NULL AND is_active IS NULL")
         conn.commit()
 
-    # Миграция services.fee → NULL-допустимая колонка (после создания таблиц,
-    # до любых операций, читающих services)
+    # Миграции: services.fee и meter_replacements.new_start → NULL-допустимые
+    # колонки (после создания таблиц, до любых операций, читающих данные).
+    # Порядок важен: сначала fee, затем new_start.
     migrate_fee_nullable()
+    migrate_new_start_nullable()
 
 # ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
 def save_bill(bill_data):
