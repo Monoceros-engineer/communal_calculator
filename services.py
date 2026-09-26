@@ -162,6 +162,14 @@ class BaseService:
         """
         raise NotImplementedError
 
+    def render_dashboard_card(self):
+        """Вернуть виджеты карточки для DashboardWidget. Реализуется в подклассах.
+
+        Возвращает словарь с ключами:
+            name_label, reading_label, tariff_label
+        """
+        raise NotImplementedError
+
     # --- Общие части строки ввода (общие для metered и fixed) ---
 
     def _build_name_label(self):
@@ -232,6 +240,19 @@ class BaseService:
         provider_btn.clicked.connect(
             lambda checked, k=self.key: parent_widget.show_provider_info(k))
         return provider_btn
+
+    # --- Общие части карточки дашборда (общие для metered и fixed) ---
+
+    def _card_name_label(self):
+        from PySide6.QtWidgets import QLabel
+
+        return QLabel(self.name)
+
+    def _card_tariff_label(self):
+        from PySide6.QtWidgets import QLabel
+
+        tariff = self.tariff if self.tariff is not None else 0.0
+        return QLabel(f"{tariff:.2f} руб.")
 
     def __repr__(self):
         return f"{type(self).__name__}(key={self.key!r}, name={self.name!r})"
@@ -379,6 +400,21 @@ class MeteredService(BaseService):
             "checkbox": commission_cb,
         }
 
+    def render_dashboard_card(self):
+        """Карточка дашборда для услуги по счётчику."""
+        from PySide6.QtWidgets import QLabel
+
+        if self.active_verification is not None:
+            reading_text = "🔴 На поверке"
+        else:
+            reading_text = f"{self.start_value or 0:.2f}"
+
+        return {
+            "name_label": self._card_name_label(),
+            "reading_label": QLabel(reading_text),
+            "tariff_label": self._card_tariff_label(),
+        }
+
 
 class FixedService(BaseService):
     """Услуга с фиксированной платой (не зависит от показаний)."""
@@ -430,4 +466,14 @@ class FixedService(BaseService):
             "provider_btn": provider_btn,
             "entry": None,
             "checkbox": commission_cb,
+        }
+
+    def render_dashboard_card(self):
+        """Карточка дашборда для фиксированной услуги (показаний нет)."""
+        from PySide6.QtWidgets import QLabel
+
+        return {
+            "name_label": self._card_name_label(),
+            "reading_label": QLabel("—"),
+            "tariff_label": self._card_tariff_label(),
         }

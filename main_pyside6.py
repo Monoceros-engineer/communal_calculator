@@ -710,22 +710,16 @@ class DashboardWidget(QWidget):
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
-            name = service["name"]
-            tariff = service.get("tariff", 0.0)
-            start_val = service.get("start_value")
-            if start_val is None:
-                start_val = 0.0
+            # Если в config.services оказался обычный словарь — превращаем его
+            # в объект, чтобы работал render_dashboard_card().
+            if not isinstance(service, BaseService):
+                service = BaseService.from_dict(service, key=key)
+                config.services[key] = service
 
-            # Проверяем активную поверку
-            active_verif = service.get('active_verification')
-            if active_verif:
-                display_value = "🔴 На поверке"
-            else:
-                display_value = f"{start_val:.2f}"
-
-            self.cards_layout.addWidget(QLabel(name), row, 0)
-            self.cards_layout.addWidget(QLabel(display_value), row, 1)
-            self.cards_layout.addWidget(QLabel(f"{tariff:.2f} руб."), row, 2)
+            card = service.render_dashboard_card()
+            self.cards_layout.addWidget(card["name_label"], row, 0)
+            self.cards_layout.addWidget(card["reading_label"], row, 1)
+            self.cards_layout.addWidget(card["tariff_label"], row, 2)
             row += 1
 
     def update_chart(self):
