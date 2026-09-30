@@ -650,9 +650,17 @@ def add_replacement(service_id, old_final, new_start, date=None):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO meter_replacements (service_id, old_final, new_start, date, is_paid, type, is_active)
-            VALUES (?, ?, ?, ?, 0, 'replacement', 0)
+            INSERT INTO meter_replacements (
+                service_id, old_final, new_start, date, is_paid, type,
+                event_type, meter_state, is_active
+            )
+            VALUES (?, ?, ?, ?, 0, 'replacement', 'replacement', 'active', 0)
         """, (service_id, old_final, new_start, date))
+        # После замены счётчик новый и активный.
+        cursor.execute(
+            "UPDATE services SET meter_state = 'active' WHERE id = ?",
+            (service_id,)
+        )
         conn.commit()
         return cursor.lastrowid
 
@@ -786,51 +794,73 @@ def add_verification(service_id, data):
     data: dict с полями old_final, new_start, date_start, date_end,
           amount_norm, next_verification_date
     """
+    date_end = data.get('date_end')
+    event_type = 'verification_start' if not date_end else 'verification_end'
+    meter_state = 'on_verification' if event_type == 'verification_start' else 'active'
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO meter_replacements (
                 service_id, old_final, new_start, date_start, date_end,
                 amount_norm, next_verification_date, is_active, type,
-                is_consumption_paid, is_norm_paid
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                event_type, meter_state, is_consumption_paid, is_norm_paid
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             service_id,
             data.get('old_final'),
             data.get('new_start'),
             data.get('date_start'),
-            data.get('date_end'),
+            date_end,
             data.get('amount_norm'),
             data.get('next_verification_date'),
-            1 if not data.get('date_end') else 0,
+            1 if not date_end else 0,
             'verification',
+            event_type,
+            meter_state,
             data.get('is_consumption_paid', 0),
             data.get('is_norm_paid', 0)
         ))
+        # Синхронизируем состояние счётчика услуги.
+        cursor.execute(
+            "UPDATE services SET meter_state = ? WHERE id = ?",
+            (meter_state, service_id)
+        )
         conn.commit()
         return cursor.lastrowid
 
 def update_verification(verification_id, data):
+    date_end = data.get('date_end')
+    event_type = 'verification_start' if not date_end else 'verification_end'
+    meter_state = 'on_verification' if event_type == 'verification_start' else 'active'
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE meter_replacements
             SET old_final = ?, new_start = ?, date_start = ?, date_end = ?,
                 amount_norm = ?, next_verification_date = ?, is_active = ?,
+                event_type = ?, meter_state = ?,
                 is_consumption_paid = ?, is_norm_paid = ?
             WHERE id = ?
         """, (
             data.get('old_final'),
             data.get('new_start'),
             data.get('date_start'),
-            data.get('date_end'),
+            date_end,
             data.get('amount_norm'),
             data.get('next_verification_date'),
-            1 if not data.get('date_end') else 0,
+            1 if not date_end else 0,
+            event_type,
+            meter_state,
             data.get('is_consumption_paid', 0),
             data.get('is_norm_paid', 0),
             verification_id
         ))
+        # Синхронизируем состояние счётчика услуги.
+        cursor.execute("""
+            UPDATE services
+            SET meter_state = ?
+            WHERE id = (SELECT service_id FROM meter_replacements WHERE id = ?)
+        """, (meter_state, verification_id))
         conn.commit()
 
 def get_active_verification(service_id):
