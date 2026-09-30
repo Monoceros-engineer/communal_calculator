@@ -44,15 +44,16 @@ class BaseService:
     SERVICE_TYPE = None
 
     def __init__(self, key=None, *, id=None, name="", enabled=True, tariff=0.0,
-                 fee=None, start_value=None, provider_id=None, replacements=None,
-                 active_verification=None, last_completed_verification=None,
-                 next_verification_date=None):
+                 meter_state=None, fee=None, start_value=None, provider_id=None,
+                 replacements=None, active_verification=None,
+                 last_completed_verification=None, next_verification_date=None):
         self.key = key
         self.id = id
         self.name = name
         self.type = self.SERVICE_TYPE
         self.enabled = bool(enabled)
         self.tariff = tariff
+        self.meter_state = meter_state
         self.fee = fee
         self.start_value = start_value
         self.provider_id = provider_id
@@ -82,6 +83,7 @@ class BaseService:
             name=data.get("name", ""),
             enabled=data.get("enabled", True),
             tariff=data.get("tariff", 0.0),
+            meter_state=data.get("meter_state"),
             fee=data.get("fee"),
             start_value=data.get("start_value"),
             provider_id=data.get("provider_id"),
@@ -103,6 +105,7 @@ class BaseService:
             "type": self.type,
             "enabled": self.enabled,
             "tariff": self.tariff,
+            "meter_state": self.meter_state,
             "fee": self.fee,
             "start_value": self.start_value,
             "provider_id": self.provider_id,
@@ -122,6 +125,7 @@ class BaseService:
             "type": self.type,
             "enabled": self.enabled,
             "tariff": self.tariff,
+            "meter_state": self.meter_state,
             "fee": self.fee,
             "start_value": self.start_value,
             "provider_id": self.provider_id,
