@@ -209,6 +209,28 @@ class BaseService:
             buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
             buttons.accepted.connect(dialog.accept)
             buttons.rejected.connect(dialog.reject)
+
+            # Стиль кнопок
+            buttons.setStyleSheet("""
+                QPushButton {
+                    background-color: #e0e0e0;
+                    border: 1px solid #aaa;
+                    border-radius: 4px;
+                    padding: 6px;
+                }
+                QPushButton:hover {
+                    background-color: #c0c0c0;
+                }
+                QPushButton:pressed {
+                    background-color: #a0a0a0;
+                }
+            """)
+
+            # Переименовать Cancel → Отмена
+            cancel_btn = buttons.button(QDialogButtonBox.Cancel)
+            if cancel_btn:
+                cancel_btn.setText("Отмена")
+
             layout.addWidget(buttons)
             if dialog.exec():
                 try:

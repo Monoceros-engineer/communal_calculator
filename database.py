@@ -128,6 +128,25 @@ def migrate_new_start_nullable():
         print(f"Migration meter_replacements.new_start failed: {e}")
         raise
 
+def migrate_zero_fee_to_null():
+    """Миграция: fee = 0.0 → NULL (0.0 семантически равен «комиссия не задана»).
+
+    Идемпотентна: если строк с fee = 0.0 нет, ничего не делает.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            count = cursor.execute(
+                "SELECT COUNT(*) FROM services WHERE fee = 0.0"
+            ).fetchone()[0]
+            if count > 0:
+                cursor.execute("UPDATE services SET fee = NULL WHERE fee = 0.0")
+                conn.commit()
+                print(f"Migration: {count} services with fee=0.0 converted to NULL.")
+    except Exception as e:
+        print(f"Migration fee=0.0 -> NULL failed: {e}")
+        raise
+
 def init_db():
     """Создаёт таблицы, если они не существуют."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -254,6 +273,7 @@ def init_db():
     # Порядок важен: сначала fee, затем new_start.
     migrate_fee_nullable()
     migrate_new_start_nullable()
+    migrate_zero_fee_to_null()
 
 # ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
 def save_bill(bill_data):
@@ -371,6 +391,12 @@ def migrate_from_json():
 
 def save_service(key, service):
     """Сохраняет услугу в таблицу services (обновляет или вставляет)."""
+    # Комиссия 0.0 семантически равна «не задана»: храним NULL, чтобы UI
+    # отличал «без комиссии» от явно заданного процента.
+    fee = service.get('fee')
+    if fee is not None and fee == 0:
+        fee = None
+
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         # Проверяем, существует ли уже услуга с таким ключом
@@ -388,7 +414,7 @@ def save_service(key, service):
                 service['type'],
                 1 if service.get('enabled', True) else 0,
                 service['tariff'],
-                service.get('fee'),  # None остаётся None → SQLite пишет NULL
+                fee,
                 service.get('start_value'),
                 service.get('provider_id'),
                 service_id
@@ -404,7 +430,7 @@ def save_service(key, service):
                 service['type'],
                 1 if service.get('enabled', True) else 0,
                 service['tariff'],
-                service.get('fee'),  # None остаётся None → SQLite пишет NULL
+                fee,
                 service.get('start_value'),
                 service.get('provider_id')
             ))

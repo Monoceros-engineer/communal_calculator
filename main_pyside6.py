@@ -42,7 +42,7 @@ try:
     )
     from file_manager import load_settings
     from config import services  # или import config, затем использовать config.services
-    from services import BaseService
+    from services import BaseService, MeteredService, FixedService
     import random
 except Exception as e:
     print("Import error:", e)
@@ -596,7 +596,7 @@ class MainWindow(QMainWindow):
 
         for key, service in config.services.items():
             # Проверяем только услуги по счётчику
-            if service.get("type") != "metered":
+            if not isinstance(service, MeteredService):
                 continue
 
             next_date_str = service.get('next_verification_date')
@@ -710,12 +710,6 @@ class DashboardWidget(QWidget):
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
-            # Если в config.services оказался обычный словарь — превращаем его
-            # в объект, чтобы работал render_dashboard_card().
-            if not isinstance(service, BaseService):
-                service = BaseService.from_dict(service, key=key)
-                config.services[key] = service
-
             card = service.render_dashboard_card()
             self.cards_layout.addWidget(card["name_label"], row, 0)
             self.cards_layout.addWidget(card["reading_label"], row, 1)
@@ -933,13 +927,6 @@ class InputPanel(QWidget):
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
-            # Если в config.services оказался обычный словарь (например, после
-            # AddServiceDialog/EditServiceDialog) — превращаем его в объект,
-            # чтобы работал render_input_row().
-            if not isinstance(service, BaseService):
-                service = BaseService.from_dict(service, key=key)
-                config.services[key] = service
-
             widgets = service.render_input_row(self)
 
             self.grid_layout.addWidget(widgets["name_label"], row, 0)
@@ -1259,7 +1246,7 @@ class ResultWindow(QDialog):
                 # Если услуга не найдена — пропускаем
                 continue
             # Если услуга фиксированная — всегда добавляем
-            if service.get("type") == "fixed":
+            if isinstance(service, FixedService):
                 filtered_results.append(data)
                 continue
             # Для услуг по счётчику проверяем Start value
@@ -1317,7 +1304,7 @@ class ResultWindow(QDialog):
 
         # Обновляем начальные значения
         for key, reading in self.current_readings.items():
-            if key in self.services and self.services[key]["type"] == "metered":
+            if key in self.services and isinstance(self.services[key], MeteredService):
                 self.services[key]["start_value"] = reading
 
         # Очищаем использованные замены из self.services
@@ -1478,7 +1465,7 @@ class AddServiceDialog(QDialog):
                 QMessageBox.warning(self, "Ошибка", "Начальное значение должно быть неотрицательным числом")
                 return
 
-        self.services[key] = new_service
+        self.services[key] = BaseService.from_dict(new_service, key=key)
         save_services()
         super().accept()
 
@@ -1500,12 +1487,12 @@ class EditServiceDialog(QDialog):
 
         # Тип (нельзя изменить, только показать)
         layout.addWidget(QLabel("Тип:"))
-        type_text = "По счётчику" if self.service["type"] == "metered" else "Фиксированная"
+        type_text = "По счётчику" if isinstance(self.service, MeteredService) else "Фиксированная"
         type_label = QLabel(type_text)
         layout.addWidget(type_label)
 
         # Начальное значение (только для metered)
-        if self.service["type"] == "metered":
+        if isinstance(self.service, MeteredService):
             layout.addWidget(QLabel("Начальное значение:"))
             self.start_edit = QLineEdit(str(self.service.get("start_value", 0)))
             layout.addWidget(self.start_edit)
@@ -1519,7 +1506,7 @@ class EditServiceDialog(QDialog):
 
         # Комиссия (%)
         layout.addWidget(QLabel("Комиссия (%):"))
-        fee_percent = int(self.service.get("fee", 0.0) * 100)
+        fee_percent = int((self.service.get("fee") or 0.0) * 100)
         self.fee_edit = QLineEdit(str(fee_percent))
         layout.addWidget(self.fee_edit)
 
@@ -1591,13 +1578,15 @@ class EditServiceDialog(QDialog):
             return
 
         updated = {
+            "id": self.service.id,
             "name": name,
             "type": self.service["type"],
             "enabled": self.enabled_check.isChecked(),
             "tariff": tariff,
-            "fee": fee
+            "fee": fee,
+            "provider_id": self.service.provider_id,
         }
-        if self.service["type"] == "metered" and self.start_edit:
+        if isinstance(self.service, MeteredService) and self.start_edit:
             try:
                 start_val = float(normalize_decimal(self.start_edit.text().strip()))
                 if start_val < 0:
@@ -1607,10 +1596,18 @@ class EditServiceDialog(QDialog):
                 QMessageBox.warning(self, "Ошибка", "Начальное значение должно быть неотрицательным числом")
                 return
 
+        # Сохраняем состояние объекта, которое диалог не редактирует
+        # (замены, поверки), чтобы не потерять его при пересоздании объекта.
+        if isinstance(self.service, BaseService):
+            updated["replacements"] = self.service.replacements
+            updated["active_verification"] = self.service.active_verification
+            updated["last_completed_verification"] = self.service.last_completed_verification
+            updated["next_verification_date"] = self.service.next_verification_date
+
         # Удаляем старый ключ, если изменился
         if new_key != self.key:
             del self.services[self.key]
-        self.services[new_key] = updated
+        self.services[new_key] = BaseService.from_dict(updated, key=new_key)
         save_services()
         super().accept()
 
@@ -1744,7 +1741,7 @@ class MeterReplacementDialog(QDialog):
             start_value = Decimal(service.get('start_value', 0))
             old_final_dec = Decimal(old_final)
             tariff = Decimal(service.get('tariff', 0))
-            fee = Decimal(service.get('fee', 0.0))
+            fee = Decimal(service.get('fee') or 0.0)
 
             # Расход до замены
             consumption = max(old_final_dec - start_value, Decimal('0'))
@@ -2094,7 +2091,7 @@ class VerificationDialog(QDialog):
             # Определяем процент комиссии
             fee_percent = Decimal('0')
             if apply_fee:
-                service_fee = Decimal(service.get('fee', 0.0))
+                service_fee = Decimal(service.get('fee') or 0.0)
                 if service_fee == 0:
                     # Комиссия не задана — запрашиваем у пользователя
                     percent = self.ask_fee_percent()
@@ -2291,7 +2288,7 @@ class SettingsWindow(QDialog):
             name_item = QTableWidgetItem(service["name"])
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             self.commissions_table.setItem(row, 0, name_item)
-            fee_percent = int(service.get("fee", 0.0) * 100)
+            fee_percent = int((service.get("fee") or 0.0) * 100)
             fee_item = QTableWidgetItem(str(fee_percent))
             self.commissions_table.setItem(row, 1, fee_item)
         #self.commissions_table.resizeColumnsToContents()
@@ -2344,7 +2341,7 @@ class SettingsWindow(QDialog):
             name_item.setData(Qt.UserRole, key)  # сохраняем ключ
             self.services_table.setItem(row, 0, name_item)
 
-            type_item = QTableWidgetItem("По счётчику" if service.get("type") == "metered" else "Фиксированная")
+            type_item = QTableWidgetItem("По счётчику" if isinstance(service, MeteredService) else "Фиксированная")
             self.services_table.setItem(row, 1, type_item)
 
             enabled = service.get("enabled", True)
@@ -2354,7 +2351,7 @@ class SettingsWindow(QDialog):
             tariff_item = QTableWidgetItem(f"{service.get('tariff', 0.0):.2f}")
             self.services_table.setItem(row, 3, tariff_item)
 
-            fee_percent = int(service.get("fee", 0.0) * 100)
+            fee_percent = int((service.get("fee") or 0.0) * 100)
             fee_item = QTableWidgetItem(f"{fee_percent}")
             self.services_table.setItem(row, 4, fee_item)
 
@@ -2588,8 +2585,9 @@ class SettingsWindow(QDialog):
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
+            from database import delete_service
+            delete_service(key)
             del self.services[key]
-            save_services()  # сохраняем в файл
             self.update_services_table()
             self.update_tariffs_table()
             self.update_commissions_table()
