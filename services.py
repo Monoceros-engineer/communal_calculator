@@ -180,8 +180,16 @@ class BaseService:
         from PySide6.QtWidgets import QLabel
 
         tariff = self.tariff if self.tariff is not None else 0.0
-        name_label = QLabel(f"<b>{self.name.upper()}</b> (тариф {tariff: .2f})")
+        icon = self.meter_status_icon()
+        if icon:
+            name_text = f"{icon} <b>{self.name.upper()}</b> (тариф {tariff: .2f})"
+        else:
+            name_text = f"<b>{self.name.upper()}</b> (тариф {tariff: .2f})"
+        name_label = QLabel(name_text)
         name_label.setWordWrap(True)  # Перенос длинных слов
+        status_text = self.meter_status_text()
+        if status_text:
+            name_label.setToolTip(status_text)
         return name_label
 
     def _build_commission_cb(self, parent_widget):
@@ -279,6 +287,35 @@ class BaseService:
 
         tariff = self.tariff if self.tariff is not None else 0.0
         return QLabel(f"{tariff:.2f} руб.")
+
+    def meter_status_icon(self) -> str:
+        """Возвращает символ статуса счётчика для UI.
+
+        Возвращает пустую строку для fixed-услуг и неизвестных состояний.
+        """
+        if self.type != 'metered':
+            return ''
+        mapping = {
+            'active': '🟢',
+            'on_verification': '🟡',
+            'on_repair': '🟡',
+            'removed': '🔴',
+            'replaced': '🔵',
+        }
+        return mapping.get(self.meter_state or 'active', '')
+
+    def meter_status_text(self) -> str:
+        """Короткий текст статуса для tooltip/dashboard."""
+        if self.type != 'metered':
+            return ''
+        labels = {
+            'active': 'Работает',
+            'on_verification': 'На поверке',
+            'on_repair': 'На ремонте',
+            'removed': 'Счётчик снят',
+            'replaced': 'Заменён',
+        }
+        return labels.get(self.meter_state or 'active', '')
 
     def __repr__(self):
         return f"{type(self).__name__}(key={self.key!r}, name={self.name!r})"
@@ -484,10 +521,18 @@ class MeteredService(BaseService):
         """Карточка дашборда для услуги по счётчику."""
         from PySide6.QtWidgets import QLabel
 
-        if self.active_verification is not None:
-            reading_text = "🔴 На поверке"
-        else:
+        icon = self.meter_status_icon()
+        if icon in ('', '🟢'):
             reading_text = f"{self.start_value or 0:.2f}"
+        else:
+            short_labels = {
+                'on_verification': 'Поверка',
+                'on_repair': 'Ремонт',
+                'removed': 'Снят',
+                'replaced': 'Замена',
+            }
+            status_text = short_labels.get(self.meter_state, self.meter_status_text())
+            reading_text = f"{icon} {status_text}"
 
         return {
             "name_label": self._card_name_label(),
