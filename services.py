@@ -292,41 +292,33 @@ class MeteredService(BaseService):
     def calculate(self, reading_str, has_commission):
         """Расчёт по показаниям с учётом замен счётчиков и поверок.
 
-        Логика перенесена из communal_calculator.process_services_data()
-        без изменений (ветка 'metered').
+        Маршрутизация по meter_state. Логика перенесена из
+        communal_calculator.process_services_data() без изменений
+        (ветка 'metered').
+        """
+        if self.type != 'metered':
+            return super().calculate(reading_str, has_commission)
+
+        state = self.meter_state or 'active'
+
+        if state == 'active':
+            return self._calc_active(reading_str, has_commission)
+        if state in ('on_verification', 'on_repair'):
+            return self._calc_norm(reading_str, has_commission)
+        if state == 'removed':
+            return self._calc_removed(reading_str, has_commission)
+        # Неизвестное состояние — ведём себя как с рабочим счётчиком.
+        return self._calc_active(reading_str, has_commission)
+
+    def _calc_active(self, reading_str, has_commission):
+        """Обычный расчёт по показаниям (рабочий счётчик).
+
+        start_value + replacements + last_completed_verification.
         """
         name = self.name
         tariff = Decimal(str(self.tariff))
         fee = Decimal(str(self.fee if self.fee is not None else 0.0))
 
-        # --- 1. Активная поверка (счётчик на поверке) ---
-        if self.active_verification:
-            amount_norm = Decimal(str(self.active_verification.get('amount_norm') or 0.0))
-            fee_amount = amount_norm * fee if has_commission else Decimal('0')
-            total = amount_norm + fee_amount
-            result = {
-                "Name": name + " (норматив)",
-                "Start value": None,
-                "End value": None,
-                "Consumption": 0,
-                "Tariff": None,
-                "Amount": amount_norm,
-                "Fee": fee_amount,
-                "Total": total
-            }
-            return {
-                'result': result,
-                'current_reading': None,
-                'cost': amount_norm,
-                'amount': amount_norm,
-                'fee': fee_amount,
-                'total': total,
-                'used_replacement_ids': [],
-                'verification_ids_used': [],
-                'norm_verification_ids': [],
-            }
-
-        # --- 2. Обычный расчёт по показаниям ---
         value_str = (reading_str or "").strip()
         if not value_str:
             return None
@@ -397,6 +389,68 @@ class MeteredService(BaseService):
             'used_replacement_ids': used_replacement_ids,
             'verification_ids_used': verification_ids_used,
             'norm_verification_ids': norm_verification_ids,
+        }
+
+    def _calc_norm(self, reading_str, has_commission):
+        """Активная поверка (или ремонт) — оплата по нормативу."""
+        name = self.name
+        tariff = Decimal(str(self.tariff))  # вычисляется как в старом коде (не используется в нормативе)
+        fee = Decimal(str(self.fee if self.fee is not None else 0.0))
+
+        amount_norm = Decimal(str(self.active_verification.get('amount_norm') or 0.0))
+        fee_amount = amount_norm * fee if has_commission else Decimal('0')
+        total = amount_norm + fee_amount
+        result = {
+            "Name": name + " (норматив)",
+            "Start value": None,
+            "End value": None,
+            "Consumption": 0,
+            "Tariff": None,
+            "Amount": amount_norm,
+            "Fee": fee_amount,
+            "Total": total
+        }
+        return {
+            'result': result,
+            'current_reading': None,
+            'cost': amount_norm,
+            'amount': amount_norm,
+            'fee': fee_amount,
+            'total': total,
+            'used_replacement_ids': [],
+            'verification_ids_used': [],
+            'norm_verification_ids': [],
+        }
+
+    def _calc_removed(self, reading_str, has_commission):
+        """Счётчик снят/демонтирован — фиксированная плата по тарифу."""
+        name = self.name
+        tariff = Decimal(str(self.tariff))
+        fee = Decimal(str(self.fee if self.fee is not None else 0.0))
+
+        amount = tariff
+        fee_amount = amount * fee if has_commission else Decimal('0')
+        total = amount + fee_amount
+        result = {
+            "Name": name,
+            "Start value": None,
+            "End value": None,
+            "Consumption": 0,
+            "Tariff": None,
+            "Amount": amount,
+            "Fee": fee_amount,
+            "Total": total
+        }
+        return {
+            'result': result,
+            'current_reading': None,
+            'cost': amount,
+            'amount': amount,
+            'fee': fee_amount,
+            'total': total,
+            'used_replacement_ids': [],
+            'verification_ids_used': [],
+            'norm_verification_ids': [],
         }
 
     def render_input_row(self, parent_widget):
