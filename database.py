@@ -788,15 +788,22 @@ def set_service_provider(service_key, provider_id):
 
 # ===== ПОВЕРКИ (новая логика на основе meter_replacements) =====
 
-def add_verification(service_id, data):
+def add_verification(service_id, data, default_event_type=None):
     """
     Создаёт запись о поверке в таблице meter_replacements.
     data: dict с полями old_final, new_start, date_start, date_end,
           amount_norm, next_verification_date
+    default_event_type: 'on_repair' сохраняет meter_state='on_repair'
+          для незавершённого события (иначе 'on_verification').
     """
     date_end = data.get('date_end')
     event_type = 'verification_start' if not date_end else 'verification_end'
-    meter_state = 'on_verification' if event_type == 'verification_start' else 'active'
+    if date_end:
+        meter_state = 'active'
+    elif default_event_type == 'on_repair':
+        meter_state = 'on_repair'
+    else:
+        meter_state = 'on_verification'
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -828,10 +835,15 @@ def add_verification(service_id, data):
         conn.commit()
         return cursor.lastrowid
 
-def update_verification(verification_id, data):
+def update_verification(verification_id, data, default_event_type=None):
     date_end = data.get('date_end')
     event_type = 'verification_start' if not date_end else 'verification_end'
-    meter_state = 'on_verification' if event_type == 'verification_start' else 'active'
+    if date_end:
+        meter_state = 'active'
+    elif default_event_type == 'on_repair':
+        meter_state = 'on_repair'
+    else:
+        meter_state = 'on_verification'
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""

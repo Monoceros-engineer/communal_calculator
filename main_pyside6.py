@@ -993,8 +993,65 @@ class InputPanel(QWidget):
             if self.parent() and hasattr(self.parent(), 'dashboard'):
                 self.parent().dashboard.update_data()
     
+    def _counter_menu(self, service_key):
+        """Возвращает список действий (текст, обработчик) для текущего meter_state."""
+        import config
+
+        def placeholder(message="Будет доступно в следующей версии"):
+            def _show():
+                QMessageBox.information(self, "Информация", message)
+            return _show
+
+        def continue_work():
+            service = config.services.get(service_key)
+            if service is not None:
+                service.meter_state = 'active'
+                save_services()
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+        service = config.services.get(service_key)
+        state = (service.meter_state if service is not None and service.type == 'metered' else None) or 'active'
+
+        if state == 'active':
+            return [
+                ("🔁 Замена счётчика", lambda: self.replace_meter(service_key)),
+                ("🔍 Поверка счётчика", lambda: self.show_verification_dialog(service_key)),
+                ("🔧 Ремонт счётчика", lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
+                ("⛔ Снять счётчик", placeholder()),
+                ("❌ Отмена", None),
+            ]
+        if state == 'on_verification':
+            return [
+                ("✅ Завершить поверку", lambda: self.show_verification_dialog(service_key)),
+                ("↩️ Отменить поверку", placeholder("Будет доступно в следующей версии")),
+                ("❌ Отмена", None),
+            ]
+        if state == 'on_repair':
+            return [
+                ("✅ Завершить ремонт", lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
+                ("↩️ Отменить ремонт", placeholder("Будет доступно в следующей версии")),
+                ("❌ Отмена", None),
+            ]
+        if state == 'removed':
+            return [
+                ("🆕 Установить новый счётчик", placeholder("Будет доступно в следующей версии")),
+                ("❌ Отмена", None),
+            ]
+        if state == 'replaced':
+            return [
+                ("✅ Продолжить работу", continue_work),
+                ("❌ Отмена", None),
+            ]
+        return [
+            ("🔁 Замена счётчика", lambda: self.replace_meter(service_key)),
+            ("🔍 Поверка счётчика", lambda: self.show_verification_dialog(service_key)),
+            ("❌ Отмена", None),
+        ]
+
     def show_counter_actions(self, service_key):
-        """Открывает диалог выбора действия со счётчиком."""
+        """Открывает диалог выбора действия со счётчиком (зависит от meter_state)."""
         dialog = QDialog(self)
         dialog.setWindowTitle("Действия со счётчиком")
         dialog.setMinimumWidth(300)
@@ -1020,24 +1077,18 @@ class InputPanel(QWidget):
                     }
                 """)
 
-        btn_replace = QPushButton("🔁 Замена счётчика")
-        btn_replace.setStyleSheet(BUTTON_STYLE)
-        btn_replace.clicked.connect(lambda: (dialog.accept(), self.replace_meter(service_key)))
-        layout.addWidget(btn_replace)
-
-        btn_verify = QPushButton("🔍 Поверка счётчика")
-        btn_verify.setStyleSheet(BUTTON_STYLE)
-        btn_verify.clicked.connect(lambda: (dialog.accept(), self.show_verification_dialog(service_key)))
-        layout.addWidget(btn_verify)
-
-        cancel_btn = QPushButton("Отмена")
-        cancel_btn.setStyleSheet(BUTTON_STYLE)
-        cancel_btn.clicked.connect(dialog.reject)
-        layout.addWidget(cancel_btn)
+        for text, handler in self._counter_menu(service_key):
+            btn = QPushButton(text)
+            btn.setStyleSheet(BUTTON_STYLE)
+            if handler is None:
+                btn.clicked.connect(dialog.reject)
+            else:
+                btn.clicked.connect(lambda checked=False, h=handler: (dialog.accept(), h()))
+            layout.addWidget(btn)
 
         dialog.exec()
 
-    def show_verification_dialog(self, service_key):
+    def show_verification_dialog(self, service_key, default_event_type=None):
         from database import get_active_verification, get_service_id_by_key
         from file_manager import load_settings
 
@@ -1049,9 +1100,9 @@ class InputPanel(QWidget):
         active = get_active_verification(service_id)
         if active:
             # Если есть активная поверка – открываем редактирование
-            dialog = VerificationDialog(service_key, active['id'], self)
+            dialog = VerificationDialog(service_key, active['id'], self, default_event_type=default_event_type)
         else:
-            dialog = VerificationDialog(service_key, None, self)
+            dialog = VerificationDialog(service_key, None, self, default_event_type=default_event_type)
 
         if dialog.exec():
             load_settings()
@@ -1822,10 +1873,11 @@ class ClickToSelectLineEdit(QLineEdit):
         self.selectAll()
 
 class VerificationDialog(QDialog):
-    def __init__(self, service_key, verification_id=None, parent=None):
+    def __init__(self, service_key, verification_id=None, parent=None, default_event_type=None):
         super().__init__(parent)
         self.service_key = service_key
         self.verification_id = verification_id
+        self.default_event_type = default_event_type
         self.setWindowTitle("Поверка счётчика" if not verification_id else "Редактирование поверки")
         self.setMinimumWidth(450)
         self.setStyleSheet("background-color: white;")
@@ -2039,9 +2091,9 @@ class VerificationDialog(QDialog):
 
         # Сохраняем поверку (создаём или обновляем)
         if self.verification_id:
-            update_verification(self.verification_id, data)
+            update_verification(self.verification_id, data, default_event_type=self.default_event_type)
         else:
-            self.verification_id = add_verification(service_id, data)
+            self.verification_id = add_verification(service_id, data, default_event_type=self.default_event_type)
 
         # --- Немедленная оплата, если чекбоксы активны ---
         pay_consumption = self.pay_consumption_check.isChecked()
@@ -2151,7 +2203,7 @@ class VerificationDialog(QDialog):
             if pay_norm:
                 data['is_norm_paid'] = 1
             if self.verification_id:
-                update_verification(self.verification_id, data)
+                update_verification(self.verification_id, data, default_event_type=self.default_event_type)
 
             from file_manager import load_settings
             load_settings()
