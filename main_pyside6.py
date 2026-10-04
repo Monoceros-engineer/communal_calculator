@@ -2270,6 +2270,11 @@ class SettingsWindow(QDialog):
         self.tab_widget.addTab(self.providers_tab, "Реквизиты")
         self.setup_providers_tab()
 
+        # Вкладка "История счётчиков"
+        self.history_tab = QWidget()
+        self.tab_widget.addTab(self.history_tab, "История")
+        self.setup_history_tab()
+
         # Кнопки диалога
         button_box = QDialogButtonBox()
         save_btn = button_box.addButton("Сохранить", QDialogButtonBox.AcceptRole)
@@ -2597,6 +2602,163 @@ class SettingsWindow(QDialog):
             if self.refresh_callback:
                 self.refresh_callback()
 
+    # ---------- Вкладка "История" ----------
+
+    @staticmethod
+    def _display_date(iso_date):
+        """Преобразует ISO-дату (YYYY-MM-DD) в DD.MM.YYYY."""
+        if not iso_date:
+            return "-"
+        parts = str(iso_date).split('-')
+        if len(parts) == 3:
+            return f"{parts[2]}.{parts[1]}.{parts[0]}"
+        return str(iso_date)
+
+    @staticmethod
+    def _display_number(value):
+        if value is None or value == '':
+            return "-"
+        try:
+            f = float(value)
+            if f.is_integer():
+                return str(int(f))
+            return str(f)
+        except (TypeError, ValueError):
+            return str(value)
+
+    @staticmethod
+    def _event_label(event):
+        event_type = event.get('event_type')
+        meter_state = event.get('meter_state')
+        if event_type == 'replacement':
+            return "Замена счётчика"
+        if event_type == 'verification_start':
+            return "Ремонт начат" if meter_state == 'on_repair' else "Поверка начата"
+        if event_type == 'verification_end':
+            return "Ремонт завершён" if meter_state == 'on_repair' else "Поверка завершена"
+        if event_type == 'removal':
+            return "Демонтаж"
+        if event_type == 'installation':
+            return "Установка нового счётчика"
+        return "—"
+
+    def setup_history_tab(self):
+        layout = QVBoxLayout(self.history_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(8)
+        self.history_table.setHorizontalHeaderLabels([
+            "ID", "Услуга", "Дата", "Событие",
+            "Начало", "Конец", "Сумма норматива", "Оплачено",
+        ])
+        self.history_table.hideColumn(0)
+        self.history_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.history_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.history_table)
+
+        btn_layout = QHBoxLayout()
+        self.btn_add_history = QPushButton("Добавить")
+        self.btn_edit_history = QPushButton("Редактировать")
+        self.btn_delete_history = QPushButton("Удалить")
+        for btn in (self.btn_add_history, self.btn_edit_history, self.btn_delete_history):
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #e0e0e0;
+                    border: 1px solid #aaa;
+                    border-radius: 4px;
+                    padding: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #c0c0c0;
+                }
+                QPushButton:pressed {
+                    background-color: #a0a0a0;
+                }
+            """)
+        btn_layout.addWidget(self.btn_add_history)
+        btn_layout.addWidget(self.btn_edit_history)
+        btn_layout.addWidget(self.btn_delete_history)
+        layout.addLayout(btn_layout)
+
+        self.btn_add_history.clicked.connect(self.add_history_event)
+        self.btn_edit_history.clicked.connect(self.edit_history_event)
+        self.btn_delete_history.clicked.connect(self.delete_history_event)
+
+        self.refresh_history_table()
+
+    def refresh_history_table(self):
+        from database import load_all_meter_events
+
+        events = load_all_meter_events()
+        self.history_table.setRowCount(len(events))
+        for row, event in enumerate(events):
+            id_item = QTableWidgetItem(str(event.get('id')))
+            id_item.setData(Qt.UserRole, event.get('service_key'))
+            self.history_table.setItem(row, 0, id_item)
+            self.history_table.setItem(row, 1, QTableWidgetItem(event.get('service_name') or ''))
+            self.history_table.setItem(row, 2, QTableWidgetItem(self._display_date(event.get('date'))))
+            self.history_table.setItem(row, 3, QTableWidgetItem(self._event_label(event)))
+            self.history_table.setItem(row, 4, QTableWidgetItem(self._display_number(event.get('old_final'))))
+            self.history_table.setItem(row, 5, QTableWidgetItem(self._display_number(event.get('new_start'))))
+            self.history_table.setItem(row, 6, QTableWidgetItem(self._display_number(event.get('amount_norm'))))
+            self.history_table.setItem(row, 7, QTableWidgetItem("Да" if event.get('is_paid') else "Нет"))
+
+        self.history_table.resizeColumnsToContents()
+        self.history_table.horizontalHeader().setStretchLastSection(False)
+        self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
+    def _after_history_change(self):
+        """Перезагружает услуги, обновляет таблицу и главное окно."""
+        from file_manager import load_settings
+        load_settings()
+        self.services = config.services
+        self.refresh_history_table()
+        parent = self.parent()
+        if parent is not None:
+            if hasattr(parent, 'dashboard'):
+                parent.dashboard.update_data()
+            if hasattr(parent, 'input_panel'):
+                parent.input_panel.rebuild_services_ui()
+
+    def add_history_event(self):
+        dialog = EventEditDialog(None, self)
+        if dialog.exec() == QDialog.Accepted:
+            self._after_history_change()
+
+    def edit_history_event(self):
+        selected = self.history_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Ошибка", "Выберите событие")
+            return
+        row = selected[0].row()
+        event_id = int(self.history_table.item(row, 0).text())
+        dialog = EventEditDialog(event_id, self)
+        if dialog.exec() == QDialog.Accepted:
+            self._after_history_change()
+
+    def delete_history_event(self):
+        selected = self.history_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Ошибка", "Выберите событие")
+            return
+        row = selected[0].row()
+        id_item = self.history_table.item(row, 0)
+        event_id = int(id_item.text())
+        service_key = id_item.data(Qt.UserRole)
+        confirm = QMessageBox.question(
+            self, "Удаление события",
+            "Удалить выбранное событие?",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        from database import delete_meter_event, recalculate_service_meter_state
+        delete_meter_event(event_id)
+        recalculate_service_meter_state(service_key)
+        self._after_history_change()
+
     def add_service(self):
         dialog = AddServiceDialog(self.services, self)
         if dialog.exec():
@@ -2703,6 +2865,252 @@ class SettingsWindow(QDialog):
         self.accept()
 
         self.accept()  # закрываем диалог
+
+class EventEditDialog(QDialog):
+    """Диалог добавления/редактирования события счётчика в Истории."""
+
+    def __init__(self, event_id=None, parent=None):
+        super().__init__(parent)
+        self.event_id = event_id
+        self.setWindowTitle("Добавить событие" if event_id is None else "Редактировать событие")
+        self.setMinimumWidth(430)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Услуга
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Услуга:"))
+        self.service_combo = QComboBox()
+        from config import services
+        from services import MeteredService
+        for key, service in services.items():
+            if isinstance(service, MeteredService):
+                self.service_combo.addItem(service.get('name', key), key)
+        row.addWidget(self.service_combo)
+        layout.addLayout(row)
+
+        # Тип события
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Тип события:"))
+        self.type_combo = QComboBox()
+        self.type_combo.addItem("Замена счётчика", 'replacement')
+        self.type_combo.addItem("Поверка", 'verification')
+        self.type_combo.addItem("Ремонт", 'repair')
+        self.type_combo.addItem("Демонтаж навсегда", 'removal')
+        self.type_combo.addItem("Установка нового счётчика", 'installation')
+        row.addWidget(self.type_combo)
+        layout.addLayout(row)
+
+        # Дата события
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Дата события:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_edit.setDate(QDate.currentDate())
+        row.addWidget(self.date_edit)
+        layout.addLayout(row)
+
+        # Показания до
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Показания до:"))
+        self.old_edit = ClickToSelectLineEdit()
+        row.addWidget(self.old_edit)
+        layout.addLayout(row)
+
+        # Показания после
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Показания после:"))
+        self.new_edit = ClickToSelectLineEdit()
+        row.addWidget(self.new_edit)
+        layout.addLayout(row)
+
+        # Дата завершения (опционально)
+        self.completed_check = QCheckBox("Событие завершено (указать дату завершения)")
+        layout.addWidget(self.completed_check)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Дата завершения:"))
+        self.date_end_edit = QDateEdit()
+        self.date_end_edit.setCalendarPopup(True)
+        self.date_end_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_end_edit.setDate(QDate.currentDate())
+        self.date_end_edit.setEnabled(False)
+        row.addWidget(self.date_end_edit)
+        layout.addLayout(row)
+        self.completed_check.toggled.connect(lambda checked: self.date_end_edit.setEnabled(checked))
+
+        # Сумма по нормативу
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Сумма по нормативу (руб.):"))
+        self.amount_norm_edit = ClickToSelectLineEdit()
+        row.addWidget(self.amount_norm_edit)
+        layout.addLayout(row)
+
+        # Оплачено
+        self.paid_check = QCheckBox("Оплачено")
+        layout.addWidget(self.paid_check)
+
+        # Кнопки
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet("""
+            QPushButton {
+                background-color: #e0e0e0;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a0a0a0;
+            }
+        """)
+        cancel_btn = button_box.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Отмена")
+        layout.addWidget(button_box)
+
+        if event_id is not None:
+            self._load_event(event_id)
+
+    def _load_event(self, event_id):
+        from database import load_all_meter_events
+
+        event = next((e for e in load_all_meter_events() if e['id'] == event_id), None)
+        if event is None:
+            return
+
+        service_key = event.get('service_key')
+        idx = self.service_combo.findData(service_key)
+        if idx >= 0:
+            self.service_combo.setCurrentIndex(idx)
+        self.service_combo.setEnabled(False)
+
+        event_type = event.get('event_type')
+        meter_state = event.get('meter_state')
+        if event_type == 'replacement':
+            kind = 'replacement'
+        elif event_type == 'removal':
+            kind = 'removal'
+        elif event_type == 'installation':
+            kind = 'installation'
+        elif meter_state == 'on_repair':
+            kind = 'repair'
+        else:
+            kind = 'verification'
+        idx = self.type_combo.findData(kind)
+        if idx >= 0:
+            self.type_combo.setCurrentIndex(idx)
+
+        if event.get('date'):
+            d = QDate.fromString(event['date'], "yyyy-MM-dd")
+            if d.isValid():
+                self.date_edit.setDate(d)
+
+        self.completed_check.setChecked(bool(event.get('date_end')))
+        if event.get('date_end'):
+            d = QDate.fromString(event['date_end'], "yyyy-MM-dd")
+            if d.isValid():
+                self.date_end_edit.setDate(d)
+
+        if event.get('old_final') is not None:
+            self.old_edit.setText(str(event['old_final']))
+        if event.get('new_start') is not None:
+            self.new_edit.setText(str(event['new_start']))
+        if event.get('amount_norm') is not None:
+            self.amount_norm_edit.setText(str(event['amount_norm']))
+        self.paid_check.setChecked(bool(event.get('is_paid')))
+
+    @staticmethod
+    def _to_float(value):
+        s = (value or '').strip()
+        if s == '':
+            return None
+        try:
+            return float(s.replace(',', '.'))
+        except ValueError:
+            return None
+
+    def accept(self):
+        from database import add_meter_event, update_meter_event, recalculate_service_meter_state
+
+        service_key = self.service_combo.currentData()
+        if not service_key:
+            QMessageBox.warning(self, "Ошибка", "Выберите услугу")
+            return
+
+        kind = self.type_combo.currentData()
+        date_val = self.date_edit.date().toString("yyyy-MM-dd")
+        date_end = self.date_end_edit.date().toString("yyyy-MM-dd") if self.completed_check.isChecked() else None
+
+        if kind == 'replacement':
+            event_type = 'replacement'
+            meter_state = 'active'
+        elif kind == 'removal':
+            event_type = 'removal'
+            meter_state = 'removed'
+        elif kind == 'installation':
+            event_type = 'installation'
+            meter_state = 'active'
+        elif kind == 'repair':
+            if date_end:
+                event_type = 'verification_end'
+                meter_state = 'active'
+            else:
+                event_type = 'verification_start'
+                meter_state = 'on_repair'
+        else:  # verification
+            if date_end:
+                event_type = 'verification_end'
+                meter_state = 'active'
+            else:
+                event_type = 'verification_start'
+                meter_state = 'on_verification'
+
+        old_final = self._to_float(self.old_edit.text())
+        new_start = self._to_float(self.new_edit.text())
+        amount_norm = self._to_float(self.amount_norm_edit.text())
+
+        # Валидация
+        if kind == 'replacement':
+            if old_final is None or new_start is None:
+                QMessageBox.warning(self, "Ошибка", "Для замены укажите показания до и после")
+                return
+        if kind in ('verification', 'repair') and date_end and new_start is None:
+            QMessageBox.warning(self, "Ошибка", "Укажите показания после")
+            return
+
+        if kind in ('verification', 'repair'):
+            date_column = None
+            date_start = date_val
+        else:
+            date_column = date_val
+            date_start = None
+
+        event_data = {
+            'service_key': service_key,
+            'event_type': event_type,
+            'meter_state': meter_state,
+            'date': date_column,
+            'date_start': date_start,
+            'date_end': date_end,
+            'old_final': old_final,
+            'new_start': new_start,
+            'amount_norm': amount_norm,
+            'is_paid': 1 if self.paid_check.isChecked() else 0,
+        }
+
+        if self.event_id is not None:
+            update_meter_event(self.event_id, event_data)
+        else:
+            add_meter_event(event_data)
+
+        recalculate_service_meter_state(service_key)
+        super().accept()
+
 
 class ProviderInfoDialog(QDialog):
     def __init__(self, provider_data, parent=None):
@@ -2932,6 +3340,32 @@ if __name__ == "__main__":
         }
         QPushButton:pressed {
             background-color: #a0a0a0;
+        }
+        QCalendarWidget QWidget {
+            color: black;
+            background-color: white;
+        }
+        QCalendarWidget QToolButton {
+            color: black;
+            background-color: white;
+            padding: 4px;
+        }
+        QCalendarWidget QToolButton:hover {
+            background-color: #e0e0e0;
+        }
+        QCalendarWidget QMenu {
+            color: black;
+            background-color: white;
+        }
+        QCalendarWidget QSpinBox {
+            color: black;
+            background-color: white;
+        }
+        QCalendarWidget QAbstractItemView:enabled {
+            color: black;
+            background-color: white;
+            selection-background-color: #4a90d9;
+            selection-color: white;
         }
     """)
 

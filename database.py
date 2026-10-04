@@ -977,6 +977,144 @@ def delete_verification(verification_id):
         cursor.execute("DELETE FROM meter_replacements WHERE id = ? AND type = 'verification'", (verification_id,))
         conn.commit()
 
+def load_all_meter_events():
+    """Возвращает все события из meter_replacements с именем услуги."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT mr.id, mr.service_id, s.key AS service_key,
+                   s.name AS service_name,
+                   COALESCE(mr.date, mr.date_start) AS date,
+                   mr.event_type, mr.meter_state, mr.old_final, mr.new_start,
+                   mr.amount_norm, mr.is_paid, mr.date_start, mr.date_end
+            FROM meter_replacements mr
+            LEFT JOIN services s ON s.id = mr.service_id
+            ORDER BY COALESCE(mr.date, mr.date_start) DESC, mr.id DESC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+def _meter_event_column_type(event_type):
+    """Маппинг event_type → колонка type в meter_replacements."""
+    if event_type in ('verification_start', 'verification_end'):
+        return 'verification'
+    if event_type in ('replacement', 'removal', 'installation'):
+        return event_type
+    return 'replacement'
+
+def add_meter_event(event_data):
+    """Добавляет событие счётчика в meter_replacements."""
+    service_key = event_data.get('service_key')
+    event_type = event_data.get('event_type')
+    type_ = _meter_event_column_type(event_type)
+    is_active = 1 if event_type == 'verification_start' else 0
+    old_final = event_data.get('old_final')
+    if old_final is None:
+        old_final = 0.0
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM services WHERE key = ?", (service_key,))
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Услуга с ключом '{service_key}' не найдена")
+        service_id = row[0]
+
+        cursor.execute("""
+            INSERT INTO meter_replacements (
+                service_id, old_final, new_start, date, is_paid,
+                date_start, date_end, amount_norm, next_verification_date,
+                is_active, type, event_type, meter_state,
+                is_consumption_paid, is_norm_paid
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        """, (
+            service_id,
+            old_final,
+            event_data.get('new_start'),
+            event_data.get('date'),
+            event_data.get('is_paid', 0),
+            event_data.get('date_start'),
+            event_data.get('date_end'),
+            event_data.get('amount_norm'),
+            event_data.get('next_verification_date'),
+            is_active,
+            type_,
+            event_type,
+            event_data.get('meter_state'),
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+def update_meter_event(event_id, event_data):
+    """Обновляет событие счётчика в meter_replacements."""
+    event_type = event_data.get('event_type')
+    type_ = _meter_event_column_type(event_type)
+    is_active = 1 if event_type == 'verification_start' else 0
+    old_final = event_data.get('old_final')
+    if old_final is None:
+        old_final = 0.0
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE meter_replacements
+            SET old_final = ?, new_start = ?, date = ?, is_paid = ?,
+                date_start = ?, date_end = ?, amount_norm = ?,
+                next_verification_date = ?, is_active = ?, type = ?,
+                event_type = ?, meter_state = ?
+            WHERE id = ?
+        """, (
+            old_final,
+            event_data.get('new_start'),
+            event_data.get('date'),
+            event_data.get('is_paid', 0),
+            event_data.get('date_start'),
+            event_data.get('date_end'),
+            event_data.get('amount_norm'),
+            event_data.get('next_verification_date'),
+            is_active,
+            type_,
+            event_type,
+            event_data.get('meter_state'),
+            event_id,
+        ))
+        conn.commit()
+
+def delete_meter_event(event_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM meter_replacements WHERE id = ?", (event_id,))
+        conn.commit()
+
+def recalculate_service_meter_state(service_key):
+    """Пересчитывает services.meter_state по последнему событию услуги."""
+    import config
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM services WHERE key = ?", (service_key,))
+        row = cursor.fetchone()
+        if row is None:
+            return
+        service_id = row[0]
+
+        cursor.execute("""
+            SELECT meter_state
+            FROM meter_replacements
+            WHERE service_id = ?
+            ORDER BY COALESCE(date, date_start) DESC, id DESC
+            LIMIT 1
+        """, (service_id,))
+        event_row = cursor.fetchone()
+        meter_state = event_row[0] if (event_row and event_row[0]) else 'active'
+
+        cursor.execute("UPDATE services SET meter_state = ? WHERE id = ?", (meter_state, service_id))
+        conn.commit()
+
+    service = config.services.get(service_key)
+    if service is not None:
+        service.meter_state = meter_state
+
 def create_payment_record(service_key, amount, consumption,
                           start_reading, end_reading, tariff,
                           fee, date, replacement_ids=None):
