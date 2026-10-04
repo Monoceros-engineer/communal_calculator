@@ -492,11 +492,19 @@ class MeteredService(BaseService):
 
     def render_input_row(self, parent_widget):
         """Строка ввода для услуги по счётчику: QLineEdit + кнопка «Счётчик»."""
-        from PySide6.QtWidgets import QLineEdit, QPushButton
+        from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton
+        from PySide6.QtCore import Qt
 
         name_label = self._build_name_label()
-        entry = QLineEdit()
-        entry.setFixedWidth(200)  # фиксированная ширина
+
+        if self.meter_state == 'removed':
+            entry = QLabel("Счётчик снят")
+            entry.setFixedWidth(200)
+            entry.setAlignment(Qt.AlignCenter)
+        else:
+            entry = QLineEdit()
+            entry.setFixedWidth(200)  # фиксированная ширина
+
         commission_cb = self._build_commission_cb(parent_widget)
 
         counter_btn = QPushButton("🔧 Счётчик")
@@ -513,7 +521,7 @@ class MeteredService(BaseService):
             "commission_cb": commission_cb,
             "action_widget": counter_btn,
             "provider_btn": provider_btn,
-            "entry": entry,
+            "entry": entry if self.meter_state != 'removed' else None,
             "checkbox": commission_cb,
         }
 

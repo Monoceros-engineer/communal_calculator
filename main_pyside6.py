@@ -1019,7 +1019,7 @@ class InputPanel(QWidget):
                 ("🔁 Замена счётчика", lambda: self.replace_meter(service_key)),
                 ("🔍 Поверка счётчика", lambda: self.show_verification_dialog(service_key)),
                 ("🔧 Ремонт счётчика", lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
-                ("⛔ Снять счётчик", placeholder()),
+                ("⛔ Снять счётчик", lambda: self.remove_meter(service_key)),
                 ("❌ Отмена", None),
             ]
         if state == 'on_verification':
@@ -1036,7 +1036,7 @@ class InputPanel(QWidget):
             ]
         if state == 'removed':
             return [
-                ("🆕 Установить новый счётчик", placeholder("Будет доступно в следующей версии")),
+                ("🆕 Установить новый счётчик", lambda: self.install_meter(service_key)),
                 ("❌ Отмена", None),
             ]
         if state == 'replaced':
@@ -1106,6 +1106,22 @@ class InputPanel(QWidget):
 
         if dialog.exec():
             load_settings()
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+    def remove_meter(self, service_key):
+        """Снять счётчик: официально демонтируем (расчёт по тарифу)."""
+        dialog = RemoveMeterDialog(service_key, self)
+        if dialog.exec() == QDialog.Accepted:
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+    def install_meter(self, service_key):
+        """Установить новый счётчик: возвращаем услугу в активное состояние."""
+        dialog = InstallMeterDialog(service_key, self)
+        if dialog.exec() == QDialog.Accepted:
             self.rebuild_services_ui()
             if self.parent() and hasattr(self.parent(), 'dashboard'):
                 self.parent().dashboard.update_data()
@@ -2647,10 +2663,10 @@ class SettingsWindow(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
 
         self.history_table = QTableWidget()
-        self.history_table.setColumnCount(8)
+        self.history_table.setColumnCount(9)
         self.history_table.setHorizontalHeaderLabels([
             "ID", "Услуга", "Дата", "Событие",
-            "Начало", "Конец", "Сумма норматива", "Оплачено",
+            "Начало", "Конец", "Сумма норматива", "Оплачено", "Комментарий",
         ])
         self.history_table.hideColumn(0)
         self.history_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -2704,6 +2720,7 @@ class SettingsWindow(QDialog):
             self.history_table.setItem(row, 5, QTableWidgetItem(self._display_number(event.get('new_start'))))
             self.history_table.setItem(row, 6, QTableWidgetItem(self._display_number(event.get('amount_norm'))))
             self.history_table.setItem(row, 7, QTableWidgetItem("Да" if event.get('is_paid') else "Нет"))
+            self.history_table.setItem(row, 8, QTableWidgetItem(event.get('comment') or "-"))
 
         self.history_table.resizeColumnsToContents()
         self.history_table.horizontalHeader().setStretchLastSection(False)
@@ -2950,6 +2967,13 @@ class EventEditDialog(QDialog):
         self.paid_check = QCheckBox("Оплачено")
         layout.addWidget(self.paid_check)
 
+        # Комментарий
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Комментарий:"))
+        self.comment_edit = QLineEdit()
+        row.addWidget(self.comment_edit)
+        layout.addLayout(row)
+
         # Кнопки
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
@@ -3023,6 +3047,8 @@ class EventEditDialog(QDialog):
         if event.get('amount_norm') is not None:
             self.amount_norm_edit.setText(str(event['amount_norm']))
         self.paid_check.setChecked(bool(event.get('is_paid')))
+        comment = event.get('comment')
+        self.comment_edit.setText(comment if comment else '')
 
     @staticmethod
     def _to_float(value):
@@ -3090,6 +3116,10 @@ class EventEditDialog(QDialog):
             date_column = date_val
             date_start = None
 
+        comment = self.comment_edit.text().strip()
+        if not comment:
+            comment = None
+
         event_data = {
             'service_key': service_key,
             'event_type': event_type,
@@ -3101,6 +3131,7 @@ class EventEditDialog(QDialog):
             'new_start': new_start,
             'amount_norm': amount_norm,
             'is_paid': 1 if self.paid_check.isChecked() else 0,
+            'comment': comment,
         }
 
         if self.event_id is not None:
@@ -3109,6 +3140,243 @@ class EventEditDialog(QDialog):
             add_meter_event(event_data)
 
         recalculate_service_meter_state(service_key)
+        super().accept()
+
+
+class RemoveMeterDialog(QDialog):
+    """Диалог снятия счётчика (демонтаж навсегда)."""
+
+    def __init__(self, service_key, parent=None):
+        super().__init__(parent)
+        self.service_key = service_key
+        from config import services
+        self.service = services.get(service_key)
+        self.setWindowTitle("Снять счётчик")
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Услуга (read-only)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Услуга:"))
+        name = self.service.get('name', service_key) if self.service else service_key
+        row.addWidget(QLabel(name))
+        layout.addLayout(row)
+
+        # Дата снятия
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Дата снятия:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_edit.setDate(QDate.currentDate())
+        row.addWidget(self.date_edit)
+        layout.addLayout(row)
+
+        # Показания на момент снятия
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Показания на момент снятия:"))
+        self.reading_edit = QLineEdit()
+        row.addWidget(self.reading_edit)
+        layout.addLayout(row)
+
+        # Комментарий
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Комментарий:"))
+        self.comment_edit = QLineEdit()
+        row.addWidget(self.comment_edit)
+        layout.addLayout(row)
+
+        # Кнопки
+        button_box = QDialogButtonBox()
+        remove_btn = button_box.addButton("Снять", QDialogButtonBox.AcceptRole)
+        cancel_btn = button_box.addButton("Отмена", QDialogButtonBox.RejectRole)
+        remove_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        button_box.setStyleSheet("""
+                                    QPushButton {
+                                        background-color: #e0e0e0;
+                                        border: 1px solid #aaa;
+                                        border-radius: 4px;
+                                        padding: 6px;
+                                    }
+                                    QPushButton:hover {
+                                        background-color: #c0c0c0;
+                                    }
+                                    QPushButton:pressed {
+                                        background-color: #a0a0a0;
+                                    }
+                                """)
+        layout.addWidget(button_box)
+
+    @staticmethod
+    def _to_float(value):
+        s = (value or '').strip()
+        if s == '':
+            return None
+        try:
+            return float(s.replace(',', '.'))
+        except ValueError:
+            return None
+
+    def accept(self):
+        from database import add_meter_event, recalculate_service_meter_state
+        from config import services
+        from file_manager import save_settings
+
+        reading = self._to_float(self.reading_edit.text())
+        old_final = reading if reading is not None else 0.0
+        date_iso = self.date_edit.date().toString("yyyy-MM-dd")
+        comment = self.comment_edit.text().strip()
+        if not comment:
+            comment = None
+
+        add_meter_event({
+            'service_key': self.service_key,
+            'event_type': 'removal',
+            'meter_state': 'removed',
+            'date': date_iso,
+            'date_start': None,
+            'date_end': None,
+            'old_final': old_final,
+            'new_start': None,
+            'amount_norm': None,
+            'is_paid': 0,
+            'comment': comment,
+        })
+
+        service = services.get(self.service_key)
+        if service is not None:
+            service.meter_state = 'removed'
+
+        save_settings()
+        recalculate_service_meter_state(self.service_key)
+        super().accept()
+
+
+class InstallMeterDialog(QDialog):
+    """Диалог установки нового счётчика."""
+
+    def __init__(self, service_key, parent=None):
+        super().__init__(parent)
+        self.service_key = service_key
+        from config import services
+        self.service = services.get(service_key)
+        self.setWindowTitle("Установить новый счётчик")
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Услуга (read-only)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Услуга:"))
+        name = self.service.get('name', service_key) if self.service else service_key
+        row.addWidget(QLabel(name))
+        layout.addLayout(row)
+
+        # Дата установки
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Дата установки:"))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_edit.setDate(QDate.currentDate())
+        row.addWidget(self.date_edit)
+        layout.addLayout(row)
+
+        # Начальные показания нового счётчика
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Начальные показания:"))
+        self.start_edit = QLineEdit("0")
+        row.addWidget(self.start_edit)
+        layout.addLayout(row)
+
+        # Тариф (предзаполнен текущим)
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Тариф:"))
+        current_tariff = self.service.get('tariff', 0.0) if self.service else 0.0
+        self.tariff_edit = QLineEdit(str(current_tariff))
+        row.addWidget(self.tariff_edit)
+        layout.addLayout(row)
+
+        # Комментарий
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Комментарий:"))
+        self.comment_edit = QLineEdit()
+        row.addWidget(self.comment_edit)
+        layout.addLayout(row)
+
+        # Кнопки
+        button_box = QDialogButtonBox()
+        install_btn = button_box.addButton("Установить", QDialogButtonBox.AcceptRole)
+        cancel_btn = button_box.addButton("Отмена", QDialogButtonBox.RejectRole)
+        install_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        button_box.setStyleSheet("""
+                                QPushButton {
+                                    background-color: #e0e0e0;
+                                    border: 1px solid #aaa;
+                                    border-radius: 4px;
+                                    padding: 6px;
+                                }
+                                QPushButton:hover {
+                                    background-color: #c0c0c0;
+                                }
+                                QPushButton:pressed {
+                                    background-color: #a0a0a0;
+                                }
+                            """)
+        layout.addWidget(button_box)
+
+    @staticmethod
+    def _to_float(value):
+        s = (value or '').strip()
+        if s == '':
+            return None
+        try:
+            return float(s.replace(',', '.'))
+        except ValueError:
+            return None
+
+    def accept(self):
+        from database import add_meter_event, recalculate_service_meter_state
+        from config import services
+        from file_manager import save_settings
+
+        start_value = self._to_float(self.start_edit.text())
+        if start_value is None:
+            start_value = 0.0
+        tariff_value = self._to_float(self.tariff_edit.text())
+        if tariff_value is None:
+            QMessageBox.warning(self, "Ошибка", "Некорректный тариф")
+            return
+        date_iso = self.date_edit.date().toString("yyyy-MM-dd")
+        comment = self.comment_edit.text().strip()
+        if not comment:
+            comment = None
+
+        add_meter_event({
+            'service_key': self.service_key,
+            'event_type': 'installation',
+            'meter_state': 'active',
+            'date': date_iso,
+            'date_start': None,
+            'date_end': None,
+            'old_final': 0.0,
+            'new_start': start_value,
+            'amount_norm': None,
+            'is_paid': 0,
+            'comment': comment,
+        })
+
+        service = services.get(self.service_key)
+        if service is not None:
+            service.meter_state = 'active'
+            service.start_value = start_value
+            service.tariff = tariff_value
+
+        save_settings()
+        recalculate_service_meter_state(self.service_key)
         super().accept()
 
 

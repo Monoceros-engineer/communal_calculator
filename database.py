@@ -228,6 +228,25 @@ def migrate_meter_replacements_event_type():
         print(f"Migration meter_replacements.event_type/meter_state failed: {e}")
         raise
 
+def migrate_meter_replacements_comment():
+    """Миграция: добавляет meter_replacements.comment (TEXT).
+
+    Идемпотентна: если колонка уже есть, ничего не делает.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(meter_replacements)")
+            cols = [row[1] for row in cursor.fetchall()]
+            if 'comment' in cols:
+                return
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN comment TEXT")
+            conn.commit()
+        print("Migration: meter_replacements.comment added.")
+    except Exception as e:
+        print(f"Migration meter_replacements.comment failed: {e}")
+        raise
+
 def init_db():
     """Создаёт таблицы, если они не существуют."""
     with sqlite3.connect(DB_PATH) as conn:
@@ -267,6 +286,7 @@ def init_db():
                 type TEXT DEFAULT 'replacement',
                 event_type TEXT,
                 meter_state TEXT,
+                comment TEXT,
                 is_consumption_paid INTEGER DEFAULT 0,
                 is_norm_paid INTEGER DEFAULT 0,
                 FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
@@ -360,6 +380,7 @@ def init_db():
     migrate_zero_fee_to_null()
     migrate_services_meter_state()
     migrate_meter_replacements_event_type()
+    migrate_meter_replacements_comment()
 
 # ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
 def save_bill(bill_data):
@@ -987,7 +1008,8 @@ def load_all_meter_events():
                    s.name AS service_name,
                    COALESCE(mr.date, mr.date_start) AS date,
                    mr.event_type, mr.meter_state, mr.old_final, mr.new_start,
-                   mr.amount_norm, mr.is_paid, mr.date_start, mr.date_end
+                   mr.amount_norm, mr.is_paid, mr.date_start, mr.date_end,
+                   mr.comment
             FROM meter_replacements mr
             LEFT JOIN services s ON s.id = mr.service_id
             ORDER BY COALESCE(mr.date, mr.date_start) DESC, mr.id DESC
@@ -1024,9 +1046,9 @@ def add_meter_event(event_data):
             INSERT INTO meter_replacements (
                 service_id, old_final, new_start, date, is_paid,
                 date_start, date_end, amount_norm, next_verification_date,
-                is_active, type, event_type, meter_state,
+                is_active, type, event_type, meter_state, comment,
                 is_consumption_paid, is_norm_paid
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
         """, (
             service_id,
             old_final,
@@ -1041,6 +1063,7 @@ def add_meter_event(event_data):
             type_,
             event_type,
             event_data.get('meter_state'),
+            event_data.get('comment'),
         ))
         conn.commit()
         return cursor.lastrowid
@@ -1061,7 +1084,7 @@ def update_meter_event(event_id, event_data):
             SET old_final = ?, new_start = ?, date = ?, is_paid = ?,
                 date_start = ?, date_end = ?, amount_norm = ?,
                 next_verification_date = ?, is_active = ?, type = ?,
-                event_type = ?, meter_state = ?
+                event_type = ?, meter_state = ?, comment = ?
             WHERE id = ?
         """, (
             old_final,
@@ -1076,6 +1099,7 @@ def update_meter_event(event_id, event_data):
             type_,
             event_type,
             event_data.get('meter_state'),
+            event_data.get('comment'),
             event_id,
         ))
         conn.commit()
