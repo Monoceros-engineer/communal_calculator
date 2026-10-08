@@ -352,6 +352,15 @@ def init_db():
                 address TEXT
             )
         """)
+
+        # Таблица настроек (key-value)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
         # Добавляем новые колонки, если их ещё нет (для существующих БД)
         cursor.execute("PRAGMA table_info(meter_replacements)")
         existing_cols = [col[1] for col in cursor.fetchall()]
@@ -381,6 +390,24 @@ def init_db():
     migrate_services_meter_state()
     migrate_meter_replacements_event_type()
     migrate_meter_replacements_comment()
+
+def get_setting(key, default=None):
+    """Возвращает значение настройки из таблицы settings."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default
+
+def set_setting(key, value):
+    """Сохраняет (вставляет или обновляет) настройку в таблице settings."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            (key, value)
+        )
+        conn.commit()
 
 # ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
 def save_bill(bill_data):

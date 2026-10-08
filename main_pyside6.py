@@ -30,7 +30,7 @@ try:
         QStackedWidget,
         QDateEdit,
     )
-    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal, QDate
+    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal, QDate, QTranslator, QLibraryInfo
     from PySide6.QtGui import QPixmap, QPainter
     import config
     from communal_calculator import (
@@ -60,6 +60,28 @@ def resource_path(relative_path):
     else:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
+
+
+def install_translators(app):
+    """Загружает .qm по настройке config.language.
+
+    'system' → по локали системы; 'ru' → ru_RU; 'en' → en_US.
+    Файлы лежат в translations/app_<lang>.qm.
+    Отсутствующий файл — это не ошибка: молча оставляем русский.
+    """
+    translator = QTranslator(app)
+    lang = getattr(config, 'language', 'system')
+    if lang == 'system':
+        sys_lang = QLocale.system().name()  # e.g. 'ru_RU', 'en_US'
+        target = 'ru' if sys_lang.startswith('ru') else 'en' if sys_lang.startswith('en') else 'ru'
+    else:
+        target = lang
+    qm_path = resource_path(f"translations/app_{target}.qm")
+    if os.path.exists(qm_path):
+        translator.load(qm_path)
+        app.installTranslator(translator)
+    # Хранить ссылку, чтобы не собрал GC:
+    app._translator = translator
 
 
 class AnimatedBackground(QWidget):
@@ -457,7 +479,7 @@ class MainWindow(QMainWindow):
         panel_layout.setSpacing(15)
                 
         # Кнопки
-        self.settings_button = QPushButton("Настройки")
+        self.settings_button = QPushButton(self.tr("Настройки"))
         self.settings_button.clicked.connect(self.open_settings)
 
         self.help_button = QPushButton("Помощь")
@@ -2254,7 +2276,7 @@ class SettingsWindow(QDialog):
         super().__init__(parent)
         self.services = services
         self.refresh_callback = refresh_callback  # для обновления главного окна
-        self.setWindowTitle("Настройки")
+        self.setWindowTitle(self.tr("Настройки"))
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
         
         # Основной layout
@@ -2290,6 +2312,11 @@ class SettingsWindow(QDialog):
         self.history_tab = QWidget()
         self.tab_widget.addTab(self.history_tab, "История")
         self.setup_history_tab()
+
+        # Вкладка "Язык"
+        self.language_tab = QWidget()
+        self.tab_widget.addTab(self.language_tab, "Язык")
+        self.setup_language_tab()
 
         # Кнопки диалога
         button_box = QDialogButtonBox()
@@ -2839,6 +2866,45 @@ class SettingsWindow(QDialog):
         self.update_services_table()
         if self.refresh_callback:
             self.refresh_callback()
+
+    def setup_language_tab(self):
+        """Создаёт интерфейс вкладки выбора языка."""
+        layout = QVBoxLayout(self.language_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        self.language_combo = QComboBox()
+        self.language_combo.addItem(self.tr("Системный (по умолчанию)"), 'system')
+        self.language_combo.addItem(self.tr("Русский"), 'ru')
+        self.language_combo.addItem(self.tr("English"), 'en')
+        layout.addWidget(self.language_combo)
+
+        current = getattr(config, 'language', 'system') or 'system'
+        idx = self.language_combo.findData(current)
+        if idx >= 0:
+            self.language_combo.setCurrentIndex(idx)
+
+        hint = QLabel(self.tr("Изменения вступят в силу после перезапуска программы."))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.restart_btn = QPushButton("Перезапустить сейчас")
+        self.restart_btn.clicked.connect(self.on_language_restart)
+        layout.addWidget(self.restart_btn)
+        layout.addStretch()
+
+    def on_language_restart(self):
+        """Сохраняет выбранный язык и сообщает о необходимости перезапуска."""
+        from file_manager import save_language
+        lang = self.language_combo.currentData()
+        if lang:
+            config.language = lang
+            save_language()
+        QMessageBox.information(
+            self,
+            "Информация",
+            "Изменения вступят в силу после перезапуска. "
+            "Пожалуйста, закройте и запустите программу заново."
+        )
 
     def save_all(self):
         """Сохраняет изменения из всех вкладок."""
@@ -3586,6 +3652,8 @@ class PaymentConfirmationDialog(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    install_translators(app)
 
     # Устанавливаем иконку приложения (глобально)
     from PySide6.QtGui import QIcon
