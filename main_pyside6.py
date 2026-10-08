@@ -173,7 +173,7 @@ def get_season_by_date():
 class WelcomeWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Добро пожаловать!")
+        self.setWindowTitle(self.tr("Добро пожаловать!"))
         self.setFixedSize(500, 400)
         self.setWindowFlags(Qt.FramelessWindowHint)  # убираем рамку (опционально)
         self.setModal(True)
@@ -204,7 +204,7 @@ class WelcomeWindow(QDialog):
         self.animated_bg.setGeometry(0, 0, 600, 400)
 
         # Заголовок (надпись)
-        self.title_label = QLabel("<h1>Добро пожаловать в Калькулятор коммуналки!</h1>", self)
+        self.title_label = QLabel(self.tr("<h1>Добро пожаловать в Калькулятор коммуналки!</h1>"), self)
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("""
             QLabel {
@@ -220,7 +220,7 @@ class WelcomeWindow(QDialog):
         self.title_label.move((self.width() - self.title_label.width()) // 2, 50)
 
         # Кнопка "Начать"
-        self.start_button = QPushButton("Начать", self)
+        self.start_button = QPushButton(self.tr("Начать"), self)
         self.start_button.setFixedSize(200, 50)
         self.start_button.setStyleSheet("""
             QPushButton {
@@ -244,7 +244,7 @@ class WelcomeWindow(QDialog):
         self.start_button.clicked.connect(self.on_start)
 
         # Кнопка помощи
-        self.help_button = QPushButton("Помощь", self)
+        self.help_button = QPushButton(self.tr("Помощь"), self)
         self.help_button.setFixedSize(200, 40)
         self.help_button.setStyleSheet("""
             QPushButton {
@@ -282,12 +282,12 @@ class WelcomeWindow(QDialog):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки не найден."))
 
 class FirstRunWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Настройка услуг")
+        self.setWindowTitle(self.tr("Настройка услуг"))
         self.setModal(True)
         self.setMinimumSize(600, 500)
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
@@ -335,7 +335,7 @@ class FirstRunWizard(QDialog):
         panel_layout.setSpacing(15)
 
         # Приветственный текст
-        label = QLabel(
+        label = QLabel(self.tr(
             "<h2>Добро пожаловать в Калькулятор коммуналки!</h2>"
             "<p>Давайте начнем с настройки программы. Для того, чтобы все работало,</p>"
             "<p>необходимо сделать несколько простых шагов:</p>"
@@ -346,20 +346,20 @@ class FirstRunWizard(QDialog):
     "<p>4. После добавления всех услуг закройте окно управления.</p>"
     "<p>5. В главном окне вводите текущие показания и нажимайте 'Рассчитать'.</p>"
     "<p>Совет: Наводите курсор на кнопки — появятся подсказки.</p>"
-        )
+        ))
         label.setWordWrap(True)
         panel_layout.addWidget(label)
 
         # Список добавленных услуг
-        panel_layout.addWidget(QLabel("Добавленные услуги:"))
+        panel_layout.addWidget(QLabel(self.tr("Добавленные услуги:")))
         self.services_list = QListWidget()
         panel_layout.addWidget(self.services_list)
 
         # Кнопки
         btn_layout = QHBoxLayout()
-        self.btn_add = QPushButton("Добавить услугу")
-        self.btn_help = QPushButton("Помощь")
-        self.btn_finish = QPushButton("✅ Готово")
+        self.btn_add = QPushButton(self.tr("Добавить услугу"))
+        self.btn_help = QPushButton(self.tr("Помощь"))
+        self.btn_finish = QPushButton(self.tr("✅ Готово"))
         self.btn_finish.setEnabled(False)
 
         btn_layout.addWidget(self.btn_add)
@@ -387,9 +387,9 @@ class FirstRunWizard(QDialog):
         self.btn_help.setStyleSheet(button_style)
         self.btn_finish.setStyleSheet(button_style)
         
-        self.btn_add.setToolTip("Нажмите, чтобы добавить новую услугу (газ, свет, вода, интернет и т.д.).")
-        self.btn_finish.setToolTip("Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню 'Настройки').")
-        self.btn_help.setToolTip("Нажмите, чтобы получить подробную справку и ознакомиться с руководством пользователя")
+        self.btn_add.setToolTip(self.tr("Нажмите, чтобы добавить новую услугу (газ, свет, вода, интернет и т.д.)."))
+        self.btn_finish.setToolTip(self.tr("Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню 'Настройки')."))
+        self.btn_help.setToolTip(self.tr("Нажмите, чтобы получить подробную справку и ознакомиться с руководством пользователя"))
 
         self.btn_add.clicked.connect(self.add_service)
         self.btn_help.clicked.connect(self.open_help)
@@ -426,12 +426,12 @@ class FirstRunWizard(QDialog):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки не найден."))
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Калькулятор коммуналки")
+        self.setWindowTitle(self.tr("Калькулятор коммуналки"))
         self.move(
             100, 100
         )  # Данное окно появляется на экране с координатами 100 пикселей на 100 пикселей
@@ -482,7 +482,7 @@ class MainWindow(QMainWindow):
         self.settings_button = QPushButton(self.tr("Настройки"))
         self.settings_button.clicked.connect(self.open_settings)
 
-        self.help_button = QPushButton("Помощь")
+        self.help_button = QPushButton(self.tr("Помощь"))
         self.help_button.clicked.connect(self.open_help)
 
         # Стиль для обеих кнопок
@@ -587,7 +587,7 @@ class MainWindow(QMainWindow):
         locale = QLocale(QLocale.Russian)
         # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
         # Можно изменить под свой вкус
-        datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
+        datetime_str = locale.toString(now, self.tr("dddd, d MMMM yyyy г. HH:mm:ss"))
         self.datetime_label.setText(datetime_str)
 
     def open_settings(self):
@@ -608,7 +608,7 @@ class MainWindow(QMainWindow):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки (help.html) не найден."))
 
     def check_verifications(self):
         from datetime import datetime, timedelta
@@ -629,13 +629,13 @@ class MainWindow(QMainWindow):
                 next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
                 days_left = (next_date - today).days
                 if 0 <= days_left <= 30:
-                    notifications.append(f"• {service['name']} — {days_left} дн.")
+                    notifications.append(self.tr("• {name} — {days} дн.").format(name=service['name'], days=days_left))
             except:
                 continue
 
         if notifications:
-            msg = "⚠️ Внимание! Приближается поверка счётчиков:\n\n" + "\n".join(notifications)
-            QMessageBox.information(self, "Напоминание о поверке", msg)
+            msg = self.tr("⚠️ Внимание! Приближается поверка счётчиков:\n\n") + "\n".join(notifications)
+            QMessageBox.information(self, self.tr("Напоминание о поверке"), msg)
 
     def open_statistics(self):
         dialog = StatisticsWindow(self)
@@ -666,13 +666,13 @@ class DashboardWidget(QWidget):
             layout.addWidget(self.canvas)
         except ImportError:
             self.canvas = None
-            layout.addWidget(QLabel("Для графиков установите matplotlib"))
+            layout.addWidget(QLabel(self.tr("Для графиков установите matplotlib")))
 
         # Кнопка перехода к вводу
-        enter_btn = QPushButton("📝 Ввести показания")
+        enter_btn = QPushButton(self.tr("📝 Ввести показания"))
 
         # Кнопка статистики
-        stat_btn = QPushButton("Статистика")
+        stat_btn = QPushButton(self.tr("Статистика"))
 
         # Стиль для обеих кнопок
         button_style = """
@@ -724,9 +724,9 @@ class DashboardWidget(QWidget):
                 widget.deleteLater()
 
         # Заголовки
-        self.cards_layout.addWidget(QLabel("<b>Услуга</b>"), 0, 0)
-        self.cards_layout.addWidget(QLabel("<b>Показания</b>"), 0, 1)
-        self.cards_layout.addWidget(QLabel("<b>Тариф</b>"), 0, 2)
+        self.cards_layout.addWidget(QLabel(self.tr("<b>Услуга</b>")), 0, 0)
+        self.cards_layout.addWidget(QLabel(self.tr("<b>Показания</b>")), 0, 1)
+        self.cards_layout.addWidget(QLabel(self.tr("<b>Тариф</b>")), 0, 2)
 
         row = 1
         for key, service in config.services.items():
@@ -757,12 +757,12 @@ class DashboardWidget(QWidget):
         ax = self.figure.add_subplot(111)
         if not df.empty:
             ax.plot(df['month'], df['total_with_fee'], marker='o', linestyle='-', color='#2E86C1')
-            ax.set_title("Расходы по месяцам (текущий год)")
-            ax.set_xlabel("Месяц")
-            ax.set_ylabel("Сумма, руб.")
+            ax.set_title(self.tr("Расходы по месяцам (текущий год)"))
+            ax.set_xlabel(self.tr("Месяц"))
+            ax.set_ylabel(self.tr("Сумма, руб."))
             ax.grid(True, linestyle='--', alpha=0.6)
         else:
-            ax.text(0.5, 0.5, "Нет данных за текущий год", ha='center', va='center')
+            ax.text(0.5, 0.5, self.tr("Нет данных за текущий год"), ha='center', va='center')
         self.canvas.draw()
 
 
@@ -776,10 +776,10 @@ class InputPanel(QWidget):
         layout = QVBoxLayout(self)
 
         # Кнопки
-        self.settings_button = QPushButton("Настройки")
+        self.settings_button = QPushButton(self.tr("Настройки"))
         self.settings_button.clicked.connect(self.open_settings)
 
-        self.help_button = QPushButton("Помощь")
+        self.help_button = QPushButton(self.tr("Помощь"))
         self.help_button.clicked.connect(self.open_help)
 
         # Стиль для обеих кнопок
@@ -840,11 +840,11 @@ class InputPanel(QWidget):
         layout.addWidget(self.services_container)
 
         # Кнопка "Рассчитать"
-        calc_button = QPushButton("Рассчитать")
+        calc_button = QPushButton(self.tr("Рассчитать"))
         calc_button.clicked.connect(self.calculate)
 
         #Кнопка "Назад"
-        back_button = QPushButton("Назад")
+        back_button = QPushButton(self.tr("Назад"))
         back_button.clicked.connect(self.go_back.emit)
         
         #Стили для кнопок "Рассчитать" и "Назад"
@@ -888,7 +888,7 @@ class InputPanel(QWidget):
         locale = QLocale(QLocale.Russian)
         # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
         # Можно изменить под свой вкус
-        datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
+        datetime_str = locale.toString(now, self.tr("dddd, d MMMM yyyy г. HH:mm:ss"))
         self.datetime_label.setText(datetime_str)
 
     def open_settings(self):
@@ -906,7 +906,7 @@ class InputPanel(QWidget):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки (help.html) не найден."))
 
     def rebuild_services_ui(self):
         # Очищаем все строки сетки, кроме первой(с заголовками)
@@ -916,25 +916,25 @@ class InputPanel(QWidget):
         self.checkboxes.clear()
 
         # Заголовки (row 0)
-        header_name = QLabel("<b>Ресурс</b>")
+        header_name = QLabel(self.tr("<b>Ресурс</b>"))
         header_name.setAlignment(
             Qt.AlignLeft | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по левому краю горизонтально и по центру вертикально
         self.grid_layout.addWidget(header_name, 0, 0)
-        header_value = QLabel("<b>Показания</b>")
+        header_value = QLabel(self.tr("<b>Показания</b>"))
         header_value.setAlignment(
             Qt.AlignCenter | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по центру горизонтально и вертикально
         self.grid_layout.addWidget(header_value, 0, 1)
-        header_comm = QLabel("<b>Комиссия</b>")
+        header_comm = QLabel(self.tr("<b>Комиссия</b>"))
         header_comm.setAlignment(
             Qt.AlignCenter | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по центру горизонтально и вертикально
         self.grid_layout.addWidget(header_comm, 0, 2)
-        header_actions = QLabel("<b>Действия</b>")
+        header_actions = QLabel(self.tr("<b>Действия</b>"))
         self.grid_layout.addWidget(header_actions, 0, 3)
         # Устанавливаем выравнивание по центру горизонтально и вертикально
-        header_info = QLabel("<b>Информация</b>")
+        header_info = QLabel(self.tr("<b>Информация</b>"))
         self.grid_layout.addWidget(header_info, 0, 4)
 
         # Настройка растяжения колонок
@@ -990,7 +990,7 @@ class InputPanel(QWidget):
         service = services.get(service_key)
 
         if not service:
-            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена"))
             return
 
         provider_id = service.get('provider_id')
@@ -1019,9 +1019,11 @@ class InputPanel(QWidget):
         """Возвращает список действий (текст, обработчик) для текущего meter_state."""
         import config
 
-        def placeholder(message="Будет доступно в следующей версии"):
+        def placeholder(message=None):
+            if message is None:
+                message = self.tr("Будет доступно в следующей версии")
             def _show():
-                QMessageBox.information(self, "Информация", message)
+                QMessageBox.information(self, self.tr("Информация"), message)
             return _show
 
         def continue_work():
@@ -1038,49 +1040,49 @@ class InputPanel(QWidget):
 
         if state == 'active':
             return [
-                ("🔁 Замена счётчика", lambda: self.replace_meter(service_key)),
-                ("🔍 Поверка счётчика", lambda: self.show_verification_dialog(service_key)),
-                ("🔧 Ремонт счётчика", lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
-                ("⛔ Снять счётчик", lambda: self.remove_meter(service_key)),
-                ("❌ Отмена", None),
+                (self.tr("🔁 Замена счётчика"), lambda: self.replace_meter(service_key)),
+                (self.tr("🔍 Поверка счётчика"), lambda: self.show_verification_dialog(service_key)),
+                (self.tr("🔧 Ремонт счётчика"), lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
+                (self.tr("⛔ Снять счётчик"), lambda: self.remove_meter(service_key)),
+                (self.tr("❌ Отмена"), None),
             ]
         if state == 'on_verification':
             return [
-                ("✅ Завершить поверку", lambda: self.show_verification_dialog(service_key)),
-                ("↩️ Отменить поверку", placeholder("Будет доступно в следующей версии")),
-                ("❌ Отмена", None),
+                (self.tr("✅ Завершить поверку"), lambda: self.show_verification_dialog(service_key)),
+                (self.tr("↩️ Отменить поверку"), placeholder()),
+                (self.tr("❌ Отмена"), None),
             ]
         if state == 'on_repair':
             return [
-                ("✅ Завершить ремонт", lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
-                ("↩️ Отменить ремонт", placeholder("Будет доступно в следующей версии")),
-                ("❌ Отмена", None),
+                (self.tr("✅ Завершить ремонт"), lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
+                (self.tr("↩️ Отменить ремонт"), placeholder()),
+                (self.tr("❌ Отмена"), None),
             ]
         if state == 'removed':
             return [
-                ("🆕 Установить новый счётчик", lambda: self.install_meter(service_key)),
-                ("❌ Отмена", None),
+                (self.tr("🆕 Установить новый счётчик"), lambda: self.install_meter(service_key)),
+                (self.tr("❌ Отмена"), None),
             ]
         if state == 'replaced':
             return [
-                ("✅ Продолжить работу", continue_work),
-                ("❌ Отмена", None),
+                (self.tr("✅ Продолжить работу"), continue_work),
+                (self.tr("❌ Отмена"), None),
             ]
         return [
-            ("🔁 Замена счётчика", lambda: self.replace_meter(service_key)),
-            ("🔍 Поверка счётчика", lambda: self.show_verification_dialog(service_key)),
-            ("❌ Отмена", None),
+            (self.tr("🔁 Замена счётчика"), lambda: self.replace_meter(service_key)),
+            (self.tr("🔍 Поверка счётчика"), lambda: self.show_verification_dialog(service_key)),
+            (self.tr("❌ Отмена"), None),
         ]
 
     def show_counter_actions(self, service_key):
         """Открывает диалог выбора действия со счётчиком (зависит от meter_state)."""
         dialog = QDialog(self)
-        dialog.setWindowTitle("Действия со счётчиком")
+        dialog.setWindowTitle(self.tr("Действия со счётчиком"))
         dialog.setMinimumWidth(300)
         dialog.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(dialog)
 
-        label = QLabel("Выберите действие для счётчика:")
+        label = QLabel(self.tr("Выберите действие для счётчика:"))
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
 
@@ -1116,7 +1118,7 @@ class InputPanel(QWidget):
 
         service_id = get_service_id_by_key(service_key)
         if service_id is None:
-            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена"))
             return
 
         active = get_active_verification(service_id)
