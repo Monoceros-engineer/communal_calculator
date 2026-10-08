@@ -62,6 +62,15 @@ class BaseService:
         self.last_completed_verification = last_completed_verification
         self.next_verification_date = next_verification_date
 
+    def tr(self, source_text, disambiguation=None, n=-1):
+        """Переводит строку интерфейса (контекст 'services').
+
+        BaseService не наследует QObject, поэтому предоставляем собственную
+        обёртку над QCoreApplication.translate.
+        """
+        from PySide6.QtCore import QCoreApplication
+        return QCoreApplication.translate("services", source_text, disambiguation, n)
+
     @classmethod
     def from_dict(cls, data, key=None):
         """Создать объект из словаря формата config.services[key].
@@ -181,10 +190,13 @@ class BaseService:
 
         tariff = self.tariff if self.tariff is not None else 0.0
         icon = self.meter_status_icon()
+        tariff_text = f"{tariff: .2f}"
         if icon:
-            name_text = f"{icon} <b>{self.name.upper()}</b> (тариф {tariff: .2f})"
+            name_text = self.tr("{icon} <b>{name}</b> (тариф {t})").format(
+                icon=icon, name=self.name.upper(), t=tariff_text)
         else:
-            name_text = f"<b>{self.name.upper()}</b> (тариф {tariff: .2f})"
+            name_text = self.tr("<b>{name}</b> (тариф {t})").format(
+                name=self.name.upper(), t=tariff_text)
         name_label = QLabel(name_text)
         name_label.setWordWrap(True)  # Перенос длинных слов
         status_text = self.meter_status_text()
@@ -202,7 +214,7 @@ class BaseService:
         if self.fee is not None:
             cb.setText(f"{int(self.fee * 100)}%")
         else:
-            cb.setText("Мой банк берёт комиссию")
+            cb.setText(self.tr("Мой банк берёт комиссию"))
 
         def on_checkbox_toggled(checked):
             if not checked:
@@ -212,10 +224,10 @@ class BaseService:
             # Комиссия не задана – открываем диалог
             dialog = QDialog(parent_widget)
             dialog.setStyleSheet("background-color: white;")  # белый фон окна
-            dialog.setWindowTitle("Настройка комиссии банка")
+            dialog.setWindowTitle(self.tr("Настройка комиссии банка"))
             dialog.setMinimumWidth(300)
             layout = QVBoxLayout(dialog)
-            layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:"))
+            layout.addWidget(QLabel(self.tr("Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:")))
             percent_edit = QLineEdit()
             layout.addWidget(percent_edit)
             buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -241,7 +253,7 @@ class BaseService:
             # Переименовать Cancel → Отмена
             cancel_btn = buttons.button(QDialogButtonBox.Cancel)
             if cancel_btn:
-                cancel_btn.setText("Отмена")
+                cancel_btn.setText(self.tr("Отмена"))
 
             layout.addWidget(buttons)
             if dialog.exec():
@@ -253,7 +265,7 @@ class BaseService:
                     save_services()
                     cb.setText(f"{int(percent)}%")
                 except:
-                    QMessageBox.warning(parent_widget, "Ошибка", "Введите число от 0 до 100")
+                    QMessageBox.warning(parent_widget, self.tr("Ошибка"), self.tr("Введите число от 0 до 100"))
                     cb.blockSignals(True)
                     cb.setChecked(False)
                     cb.blockSignals(False)
@@ -268,7 +280,7 @@ class BaseService:
     def _build_provider_btn(self, parent_widget):
         from PySide6.QtWidgets import QPushButton
 
-        provider_btn = QPushButton("🏦 Реквизиты")
+        provider_btn = QPushButton(self.tr("🏦 Реквизиты"))
         provider_btn.setFixedWidth(130)
         provider_btn.setStyleSheet(_GREY_BUTTON_STYLE)
         provider_btn.clicked.connect(
@@ -286,7 +298,7 @@ class BaseService:
         from PySide6.QtWidgets import QLabel
 
         tariff = self.tariff if self.tariff is not None else 0.0
-        return QLabel(f"{tariff:.2f} руб.")
+        return QLabel(self.tr("{t} руб.").format(t=f"{tariff:.2f}"))
 
     def meter_status_icon(self) -> str:
         """Возвращает символ статуса счётчика для UI.
@@ -309,11 +321,11 @@ class BaseService:
         if self.type != 'metered':
             return ''
         labels = {
-            'active': 'Работает',
-            'on_verification': 'На поверке',
-            'on_repair': 'На ремонте',
-            'removed': 'Счётчик снят',
-            'replaced': 'Заменён',
+            'active': self.tr("Работает"),
+            'on_verification': self.tr("На поверке"),
+            'on_repair': self.tr("На ремонте"),
+            'removed': self.tr("Счётчик снят"),
+            'replaced': self.tr("Заменён"),
         }
         return labels.get(self.meter_state or 'active', '')
 
@@ -438,7 +450,7 @@ class MeteredService(BaseService):
         fee_amount = amount_norm * fee if has_commission else Decimal('0')
         total = amount_norm + fee_amount
         result = {
-            "Name": name + " (норматив)",
+            "Name": name + self.tr(" (норматив)"),
             "Start value": None,
             "End value": None,
             "Consumption": 0,
@@ -498,7 +510,7 @@ class MeteredService(BaseService):
         name_label = self._build_name_label()
 
         if self.meter_state == 'removed':
-            entry = QLabel("Счётчик снят")
+            entry = QLabel(self.tr("Счётчик снят"))
             entry.setFixedWidth(200)
             entry.setAlignment(Qt.AlignCenter)
         else:
@@ -507,7 +519,7 @@ class MeteredService(BaseService):
 
         commission_cb = self._build_commission_cb(parent_widget)
 
-        counter_btn = QPushButton("🔧 Счётчик")
+        counter_btn = QPushButton(self.tr("🔧 Счётчик"))
         counter_btn.setFixedWidth(130)
         counter_btn.setStyleSheet(_GREY_BUTTON_STYLE)
         counter_btn.clicked.connect(
@@ -534,10 +546,10 @@ class MeteredService(BaseService):
             reading_text = f"{self.start_value or 0:.2f}"
         else:
             short_labels = {
-                'on_verification': 'Поверка',
-                'on_repair': 'Ремонт',
-                'removed': 'Снят',
-                'replaced': 'Замена',
+                'on_verification': self.tr("Поверка"),
+                'on_repair': self.tr("Ремонт"),
+                'removed': self.tr("Снят"),
+                'replaced': self.tr("Замена"),
             }
             status_text = short_labels.get(self.meter_state, self.meter_status_text())
             reading_text = f"{icon} {status_text}"
@@ -585,7 +597,7 @@ class FixedService(BaseService):
         from PySide6.QtCore import Qt
 
         name_label = self._build_name_label()
-        label = QLabel("Показания счетчика не требуются")
+        label = QLabel(self.tr("Показания счетчика не требуются"))
         label.setFixedWidth(200)
         label.setAlignment(Qt.AlignCenter)  # Выравниваем по центру
         commission_cb = self._build_commission_cb(parent_widget)
