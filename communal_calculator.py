@@ -3,6 +3,8 @@ import config
 from file_manager import save_settings
 from decimal import Decimal, InvalidOperation
 from calculations import normalize_decimal, calculate_consumption_with_replacements
+from PySide6.QtCore import QCoreApplication
+
 
 def get_services():
     """Возвращает словарь services со всеми параметрами."""
@@ -145,9 +147,9 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
             calc = service.calculate(reading, has_commission)
         except InvalidOperation:
             if error_callback:
-                error_callback(service["name"], "Введите корректное число!")
+                error_callback(service["name"], QCoreApplication.translate("communal_calculator", "Введите корректное число!"))
             else:
-                raise ValueError(f"В поле '{service['name']}' введите корректное число!")
+                raise ValueError(QCoreApplication.translate("communal_calculator", "В поле '{name}' введите корректное число!").format(name=service['name']))
             return None
         if calc is None:
             continue
@@ -166,7 +168,10 @@ def process_services_data(readings, commissions, warning_callback=None, error_ca
 
     if not results_data:
         if warning_callback:
-            warning_callback("Предупреждение", "Заполните хотя бы одно поле!")
+            warning_callback(
+                QCoreApplication.translate("communal_calculator", "Предупреждение"),
+                QCoreApplication.translate("communal_calculator", "Заполните хотя бы одно поле!"),
+            )
         else:
             pass
         return None

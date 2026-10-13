@@ -16,7 +16,7 @@
     <message>
         <location filename="../main_pyside6.py" line="1451"/>
         <source>Введите название услуги, которую вы хотите добавить (например, &apos;Газ&apos;, &apos;Электричество&apos;).</source>
-        <translation>Enter the name of the service you want to add (for example, 'Gas', 'Electricity').</translation>
+        <translation>Enter the name of the service you want to add (for example, &apos;Gas&apos;, &apos;Electricity&apos;).</translation>
     </message>
     <message>
         <location filename="../main_pyside6.py" line="1455"/>
@@ -108,84 +108,6 @@ For a new service, the initial reading is usually 0.</translation>
         <location filename="../main_pyside6.py" line="1556"/>
         <source>Начальное значение должно быть неотрицательным числом</source>
         <translation>The initial reading must be a non-negative number</translation>
-    </message>
-</context>
-<context>
-    <name>BaseService</name>
-    <message>
-        <location filename="../services.py" line="195"/>
-        <source>{icon} &lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
-        <translation>{icon} &lt;b&gt;{name}&lt;/b&gt; (tariff {t})</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="198"/>
-        <source>&lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
-        <translation>&lt;b&gt;{name}&lt;/b&gt; (tariff {t})</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="217"/>
-        <source>Мой банк берёт комиссию</source>
-        <translation>My bank charges a fee</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="227"/>
-        <source>Настройка комиссии банка</source>
-        <translation>Bank Fee Settings</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="230"/>
-        <source>Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:</source>
-        <translation>Enter the fee (as a percentage) that the bank charges on payments for this service:</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="256"/>
-        <source>Отмена</source>
-        <translation>Cancel</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="268"/>
-        <source>Ошибка</source>
-        <translation>Error</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="268"/>
-        <source>Введите число от 0 до 100</source>
-        <translation>Enter a number from 0 to 100</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="283"/>
-        <source>🏦 Реквизиты</source>
-        <translation>🏦 Payment details</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="301"/>
-        <source>{t} руб.</source>
-        <translation>{t} RUB</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="324"/>
-        <source>Работает</source>
-        <translation>Working</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="325"/>
-        <source>На поверке</source>
-        <translation>Under verification</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="326"/>
-        <source>На ремонте</source>
-        <translation>Under repair</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="327"/>
-        <source>Счётчик снят</source>
-        <translation>Meter removed</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="328"/>
-        <source>Заменён</source>
-        <translation>Replaced</translation>
     </message>
 </context>
 <context>
@@ -552,8 +474,8 @@ For a new service, the initial reading is usually 0.</translation>
         <location filename="../main_pyside6.py" line="339"/>
         <source>&lt;h2&gt;Добро пожаловать в Калькулятор коммуналки!&lt;/h2&gt;&lt;p&gt;Давайте начнем с настройки программы. Для того, чтобы все работало,&lt;/p&gt;&lt;p&gt;необходимо сделать несколько простых шагов:&lt;/p&gt;&lt;p&gt;1. Нажмите кнопку &apos;Добавить&apos;, чтобы создать услугу, расход по которой вы будете считать
  (газ, свет, вода и т.д.).&lt;/p&gt;&lt;p&gt;2. Выберите тип услуги: &apos;По счётчику&apos; или &apos;Фиксированная&apos;.&lt;/p&gt;&lt;p&gt;3. Заполните название, тариф, комиссию (если есть). Для услуг по счётчику также укажите начальные показания (то есть те показания счетчика, которые вы передавали при прошлой оплате услуги).&lt;/p&gt;&lt;p&gt;4. После добавления всех услуг закройте окно управления.&lt;/p&gt;&lt;p&gt;5. В главном окне вводите текущие показания и нажимайте &apos;Рассчитать&apos;.&lt;/p&gt;&lt;p&gt;Совет: Наводите курсор на кнопки — появятся подсказки.&lt;/p&gt;</source>
-        <translation>&lt;h2&gt;Welcome to the Utility Calculator!&lt;/h2&gt;&lt;p&gt;Let's get started by setting up the program. To make everything work,&lt;/p&gt;&lt;p&gt;you need to take a few simple steps:&lt;/p&gt;&lt;p&gt;1. Click 'Add' to create a service whose consumption you want to track
- (gas, electricity, water, etc.).&lt;/p&gt;&lt;p&gt;2. Choose the service type: 'Metered' or 'Fixed'.&lt;/p&gt;&lt;p&gt;3. Fill in the name, tariff, and fee (if any). For metered services, also enter the initial reading (that is, the meter reading you submitted at your last payment).&lt;/p&gt;&lt;p&gt;4. When you have added all services, close the management window.&lt;/p&gt;&lt;p&gt;5. In the main window, enter the current readings and click 'Calculate'.&lt;/p&gt;&lt;p&gt;Tip: Hover over buttons to see tooltips.&lt;/p&gt;</translation>
+        <translation>&lt;h2&gt;Welcome to the Utility Calculator!&lt;/h2&gt;&lt;p&gt;Let&apos;s get started by setting up the program. To make everything work,&lt;/p&gt;&lt;p&gt;you need to take a few simple steps:&lt;/p&gt;&lt;p&gt;1. Click &apos;Add&apos; to create a service whose consumption you want to track
+ (gas, electricity, water, etc.).&lt;/p&gt;&lt;p&gt;2. Choose the service type: &apos;Metered&apos; or &apos;Fixed&apos;.&lt;/p&gt;&lt;p&gt;3. Fill in the name, tariff, and fee (if any). For metered services, also enter the initial reading (that is, the meter reading you submitted at your last payment).&lt;/p&gt;&lt;p&gt;4. When you have added all services, close the management window.&lt;/p&gt;&lt;p&gt;5. In the main window, enter the current readings and click &apos;Calculate&apos;.&lt;/p&gt;&lt;p&gt;Tip: Hover over buttons to see tooltips.&lt;/p&gt;</translation>
     </message>
     <message>
         <location filename="../main_pyside6.py" line="354"/>
@@ -583,7 +505,7 @@ For a new service, the initial reading is usually 0.</translation>
     <message>
         <location filename="../main_pyside6.py" line="391"/>
         <source>Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню &apos;Настройки&apos;).</source>
-        <translation>Finish setup and open the main window (you can add services later from the 'Settings' menu).</translation>
+        <translation>Finish setup and open the main window (you can add services later from the &apos;Settings&apos; menu).</translation>
     </message>
     <message>
         <location filename="../main_pyside6.py" line="392"/>
@@ -599,14 +521,6 @@ For a new service, the initial reading is usually 0.</translation>
         <location filename="../main_pyside6.py" line="429"/>
         <source>Файл справки не найден.</source>
         <translation>Help file not found.</translation>
-    </message>
-</context>
-<context>
-    <name>FixedService</name>
-    <message>
-        <location filename="../services.py" line="600"/>
-        <source>Показания счетчика не требуются</source>
-        <translation>Meter readings are not required</translation>
     </message>
 </context>
 <context>
@@ -892,7 +806,7 @@ For a new service, the initial reading is usually 0.</translation>
     <message>
         <location filename="../main_pyside6.py" line="1722"/>
         <source>Оплатить расход по старому счётчику</source>
-        <translation>Pay the old meter's consumption</translation>
+        <translation>Pay the old meter&apos;s consumption</translation>
     </message>
     <message>
         <location filename="../main_pyside6.py" line="1747"/>
@@ -952,44 +866,6 @@ For a new service, the initial reading is usually 0.</translation>
         <location filename="../main_pyside6.py" line="1899"/>
         <source>Замена сохранена и оплачена</source>
         <translation>Replacement saved and paid</translation>
-    </message>
-</context>
-<context>
-    <name>MeteredService</name>
-    <message>
-        <location filename="../services.py" line="453"/>
-        <source> (норматив)</source>
-        <translation> (norm)</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="513"/>
-        <source>Счётчик снят</source>
-        <translation>Meter removed</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="522"/>
-        <source>🔧 Счётчик</source>
-        <translation>🔧 Meter</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="549"/>
-        <source>Поверка</source>
-        <translation>Verification</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="550"/>
-        <source>Ремонт</source>
-        <translation>Repair</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="551"/>
-        <source>Снят</source>
-        <translation>Removed</translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="552"/>
-        <source>Замена</source>
-        <translation>Replacement</translation>
     </message>
 </context>
 <context>
@@ -1545,7 +1421,7 @@ New initial readings for the next month:
     <message>
         <location filename="../main_pyside6.py" line="2843"/>
         <source>Удалить услугу &apos;{name}&apos;?</source>
-        <translation>Delete service '{name}'?</translation>
+        <translation>Delete service &apos;{name}&apos;?</translation>
     </message>
     <message>
         <location filename="../main_pyside6.py" line="2877"/>
@@ -1586,6 +1462,81 @@ New initial readings for the next month:
         <location filename="../main_pyside6.py" line="2944"/>
         <source>Комиссия должна быть числом от 0 до 100 для услуги {name}</source>
         <translation>The fee must be a number from 0 to 100 for service {name}</translation>
+    </message>
+</context>
+<context>
+    <name>StatisticsWindow</name>
+    <message>
+        <location filename="../stats_window.py" line="16"/>
+        <source>Статистика</source>
+        <translation>Statistics</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="30"/>
+        <source>Год:</source>
+        <translation>Year:</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="39"/>
+        <source>Группировка:</source>
+        <translation>Grouping:</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="41"/>
+        <source>По месяцам</source>
+        <translation>By month</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="42"/>
+        <source>По кварталам</source>
+        <translation>By quarter</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="43"/>
+        <source>По годам</source>
+        <translation>By year</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="72"/>
+        <source>Динамика расходов</source>
+        <translation>Expense Dynamics</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="108"/>
+        <source>Закрыть</source>
+        <translation>Close</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="128"/>
+        <source>Все годы</source>
+        <translation>All years</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="132"/>
+        <location filename="../stats_window.py" line="205"/>
+        <location filename="../stats_window.py" line="243"/>
+        <source>Нет данных</source>
+        <translation>No data</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="135"/>
+        <source>Ошибка</source>
+        <translation>Error</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="203"/>
+        <source>Распределение расходов</source>
+        <translation>Expense Breakdown</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="218"/>
+        <source>Период</source>
+        <translation>Period</translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="219"/>
+        <source>Сумма, руб.</source>
+        <translation>Amount, RUB</translation>
     </message>
 </context>
 <context>
@@ -1775,6 +1726,143 @@ New initial readings for the next month:
         <location filename="../main_pyside6.py" line="285"/>
         <source>Файл справки не найден.</source>
         <translation>Help file not found.</translation>
+    </message>
+</context>
+<context>
+    <name>communal_calculator</name>
+    <message>
+        <location filename="../communal_calculator.py" line="150"/>
+        <source>Введите корректное число!</source>
+        <translation>Enter a valid number!</translation>
+    </message>
+    <message>
+        <location filename="../communal_calculator.py" line="152"/>
+        <source>В поле &apos;{name}&apos; введите корректное число!</source>
+        <translation>Enter a valid number in the &apos;{name}&apos; field!</translation>
+    </message>
+    <message>
+        <location filename="../communal_calculator.py" line="172"/>
+        <source>Предупреждение</source>
+        <translation>Warning</translation>
+    </message>
+    <message>
+        <location filename="../communal_calculator.py" line="173"/>
+        <source>Заполните хотя бы одно поле!</source>
+        <translation>Fill in at least one field!</translation>
+    </message>
+</context>
+<context>
+    <name>services</name>
+    <message>
+        <location filename="../services.py" line="187"/>
+        <source>{icon} &lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
+        <translation>{icon} &lt;b&gt;{name}&lt;/b&gt; (tariff {t})</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="190"/>
+        <source>&lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
+        <translation>&lt;b&gt;{name}&lt;/b&gt; (tariff {t})</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="209"/>
+        <source>Мой банк берёт комиссию</source>
+        <translation>My bank charges a fee</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="219"/>
+        <source>Настройка комиссии банка</source>
+        <translation>Bank Fee Settings</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="222"/>
+        <source>Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:</source>
+        <translation>Enter the fee (as a percentage) that the bank charges on payments for this service:</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="248"/>
+        <source>Отмена</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="260"/>
+        <source>Ошибка</source>
+        <translation>Error</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="260"/>
+        <source>Введите число от 0 до 100</source>
+        <translation>Enter a number from 0 to 100</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="275"/>
+        <source>🏦 Реквизиты</source>
+        <translation>🏦 Payment details</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="293"/>
+        <source>{t} руб.</source>
+        <translation>{t} RUB</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="316"/>
+        <source>Работает</source>
+        <translation>Working</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="317"/>
+        <source>На поверке</source>
+        <translation>Under verification</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="318"/>
+        <source>На ремонте</source>
+        <translation>Under repair</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="319"/>
+        <location filename="../services.py" line="505"/>
+        <source>Счётчик снят</source>
+        <translation>Meter removed</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="320"/>
+        <source>Заменён</source>
+        <translation>Replaced</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="445"/>
+        <source> (норматив)</source>
+        <translation> (norm)</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="514"/>
+        <source>🔧 Счётчик</source>
+        <translation>🔧 Meter</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="541"/>
+        <source>Поверка</source>
+        <translation>Verification</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="542"/>
+        <source>Ремонт</source>
+        <translation>Repair</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="543"/>
+        <source>Снят</source>
+        <translation>Removed</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="544"/>
+        <source>Замена</source>
+        <translation>Replacement</translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="592"/>
+        <source>Показания счетчика не требуются</source>
+        <translation>Meter readings are not required</translation>
     </message>
 </context>
 </TS>

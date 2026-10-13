@@ -108,84 +108,6 @@
     </message>
 </context>
 <context>
-    <name>BaseService</name>
-    <message>
-        <location filename="../services.py" line="195"/>
-        <source>{icon} &lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="198"/>
-        <source>&lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="217"/>
-        <source>Мой банк берёт комиссию</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="227"/>
-        <source>Настройка комиссии банка</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="230"/>
-        <source>Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="256"/>
-        <source>Отмена</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="268"/>
-        <source>Ошибка</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="268"/>
-        <source>Введите число от 0 до 100</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="283"/>
-        <source>🏦 Реквизиты</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="301"/>
-        <source>{t} руб.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="324"/>
-        <source>Работает</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="325"/>
-        <source>На поверке</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="326"/>
-        <source>На ремонте</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="327"/>
-        <source>Счётчик снят</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="328"/>
-        <source>Заменён</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>DashboardWidget</name>
     <message>
         <location filename="../main_pyside6.py" line="669"/>
@@ -598,14 +520,6 @@
     </message>
 </context>
 <context>
-    <name>FixedService</name>
-    <message>
-        <location filename="../services.py" line="600"/>
-        <source>Показания счетчика не требуются</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>InputPanel</name>
     <message>
         <location filename="../main_pyside6.py" line="779"/>
@@ -945,44 +859,6 @@
     <message>
         <location filename="../main_pyside6.py" line="1899"/>
         <source>Замена сохранена и оплачена</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>MeteredService</name>
-    <message>
-        <location filename="../services.py" line="453"/>
-        <source> (норматив)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="513"/>
-        <source>Счётчик снят</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="522"/>
-        <source>🔧 Счётчик</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="549"/>
-        <source>Поверка</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="550"/>
-        <source>Ремонт</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="551"/>
-        <source>Снят</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../services.py" line="552"/>
-        <source>Замена</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -1580,6 +1456,81 @@
     </message>
 </context>
 <context>
+    <name>StatisticsWindow</name>
+    <message>
+        <location filename="../stats_window.py" line="16"/>
+        <source>Статистика</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="30"/>
+        <source>Год:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="39"/>
+        <source>Группировка:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="41"/>
+        <source>По месяцам</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="42"/>
+        <source>По кварталам</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="43"/>
+        <source>По годам</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="72"/>
+        <source>Динамика расходов</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="108"/>
+        <source>Закрыть</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="128"/>
+        <source>Все годы</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="132"/>
+        <location filename="../stats_window.py" line="205"/>
+        <location filename="../stats_window.py" line="243"/>
+        <source>Нет данных</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="135"/>
+        <source>Ошибка</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="203"/>
+        <source>Распределение расходов</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="218"/>
+        <source>Период</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../stats_window.py" line="219"/>
+        <source>Сумма, руб.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>VerificationDialog</name>
     <message>
         <location filename="../main_pyside6.py" line="1921"/>
@@ -1765,6 +1716,143 @@
     <message>
         <location filename="../main_pyside6.py" line="285"/>
         <source>Файл справки не найден.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>communal_calculator</name>
+    <message>
+        <location filename="../communal_calculator.py" line="150"/>
+        <source>Введите корректное число!</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../communal_calculator.py" line="152"/>
+        <source>В поле &apos;{name}&apos; введите корректное число!</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../communal_calculator.py" line="172"/>
+        <source>Предупреждение</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../communal_calculator.py" line="173"/>
+        <source>Заполните хотя бы одно поле!</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>services</name>
+    <message>
+        <location filename="../services.py" line="187"/>
+        <source>{icon} &lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="190"/>
+        <source>&lt;b&gt;{name}&lt;/b&gt; (тариф {t})</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="209"/>
+        <source>Мой банк берёт комиссию</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="219"/>
+        <source>Настройка комиссии банка</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="222"/>
+        <source>Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="248"/>
+        <source>Отмена</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="260"/>
+        <source>Ошибка</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="260"/>
+        <source>Введите число от 0 до 100</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="275"/>
+        <source>🏦 Реквизиты</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="293"/>
+        <source>{t} руб.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="316"/>
+        <source>Работает</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="317"/>
+        <source>На поверке</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="318"/>
+        <source>На ремонте</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="319"/>
+        <location filename="../services.py" line="505"/>
+        <source>Счётчик снят</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="320"/>
+        <source>Заменён</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="445"/>
+        <source> (норматив)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="514"/>
+        <source>🔧 Счётчик</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="541"/>
+        <source>Поверка</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="542"/>
+        <source>Ремонт</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="543"/>
+        <source>Снят</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="544"/>
+        <source>Замена</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../services.py" line="592"/>
+        <source>Показания счетчика не требуются</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
