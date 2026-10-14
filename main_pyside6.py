@@ -30,7 +30,7 @@ try:
         QStackedWidget,
         QDateEdit,
     )
-    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal, QDate
+    from PySide6.QtCore import Qt, QTimer, QDateTime, QLocale, QRect, Signal, QDate, QTranslator, QLibraryInfo
     from PySide6.QtGui import QPixmap, QPainter
     import config
     from communal_calculator import (
@@ -42,6 +42,7 @@ try:
     )
     from file_manager import load_settings
     from config import services  # или import config, затем использовать config.services
+    from services import BaseService, MeteredService, FixedService
     import random
 except Exception as e:
     print("Import error:", e)
@@ -59,6 +60,28 @@ def resource_path(relative_path):
     else:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
+
+
+def install_translators(app):
+    """Загружает .qm по настройке config.language.
+
+    'system' → по локали системы; 'ru' → ru_RU; 'en' → en_US.
+    Файлы лежат в translations/app_<lang>.qm.
+    Отсутствующий файл — это не ошибка: молча оставляем русский.
+    """
+    translator = QTranslator(app)
+    lang = getattr(config, 'language', 'system')
+    if lang == 'system':
+        sys_lang = QLocale.system().name()  # e.g. 'ru_RU', 'en_US'
+        target = 'ru' if sys_lang.startswith('ru') else 'en' if sys_lang.startswith('en') else 'ru'
+    else:
+        target = lang
+    qm_path = resource_path(f"translations/app_{target}.qm")
+    if os.path.exists(qm_path):
+        translator.load(qm_path)
+        app.installTranslator(translator)
+    # Хранить ссылку, чтобы не собрал GC:
+    app._translator = translator
 
 
 class AnimatedBackground(QWidget):
@@ -150,7 +173,7 @@ def get_season_by_date():
 class WelcomeWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Добро пожаловать!")
+        self.setWindowTitle(self.tr("Добро пожаловать!"))
         self.setFixedSize(500, 400)
         self.setWindowFlags(Qt.FramelessWindowHint)  # убираем рамку (опционально)
         self.setModal(True)
@@ -181,7 +204,7 @@ class WelcomeWindow(QDialog):
         self.animated_bg.setGeometry(0, 0, 600, 400)
 
         # Заголовок (надпись)
-        self.title_label = QLabel("<h1>Добро пожаловать в Калькулятор коммуналки!</h1>", self)
+        self.title_label = QLabel(self.tr("<h1>Добро пожаловать в Калькулятор коммуналки!</h1>"), self)
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("""
             QLabel {
@@ -197,7 +220,7 @@ class WelcomeWindow(QDialog):
         self.title_label.move((self.width() - self.title_label.width()) // 2, 50)
 
         # Кнопка "Начать"
-        self.start_button = QPushButton("Начать", self)
+        self.start_button = QPushButton(self.tr("Начать"), self)
         self.start_button.setFixedSize(200, 50)
         self.start_button.setStyleSheet("""
             QPushButton {
@@ -221,7 +244,7 @@ class WelcomeWindow(QDialog):
         self.start_button.clicked.connect(self.on_start)
 
         # Кнопка помощи
-        self.help_button = QPushButton("Помощь", self)
+        self.help_button = QPushButton(self.tr("Помощь"), self)
         self.help_button.setFixedSize(200, 40)
         self.help_button.setStyleSheet("""
             QPushButton {
@@ -259,12 +282,12 @@ class WelcomeWindow(QDialog):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки не найден."))
 
 class FirstRunWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Настройка услуг")
+        self.setWindowTitle(self.tr("Настройка услуг"))
         self.setModal(True)
         self.setMinimumSize(600, 500)
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
@@ -312,7 +335,7 @@ class FirstRunWizard(QDialog):
         panel_layout.setSpacing(15)
 
         # Приветственный текст
-        label = QLabel(
+        label = QLabel(self.tr(
             "<h2>Добро пожаловать в Калькулятор коммуналки!</h2>"
             "<p>Давайте начнем с настройки программы. Для того, чтобы все работало,</p>"
             "<p>необходимо сделать несколько простых шагов:</p>"
@@ -323,20 +346,20 @@ class FirstRunWizard(QDialog):
     "<p>4. После добавления всех услуг закройте окно управления.</p>"
     "<p>5. В главном окне вводите текущие показания и нажимайте 'Рассчитать'.</p>"
     "<p>Совет: Наводите курсор на кнопки — появятся подсказки.</p>"
-        )
+        ))
         label.setWordWrap(True)
         panel_layout.addWidget(label)
 
         # Список добавленных услуг
-        panel_layout.addWidget(QLabel("Добавленные услуги:"))
+        panel_layout.addWidget(QLabel(self.tr("Добавленные услуги:")))
         self.services_list = QListWidget()
         panel_layout.addWidget(self.services_list)
 
         # Кнопки
         btn_layout = QHBoxLayout()
-        self.btn_add = QPushButton("Добавить услугу")
-        self.btn_help = QPushButton("Помощь")
-        self.btn_finish = QPushButton("✅ Готово")
+        self.btn_add = QPushButton(self.tr("Добавить услугу"))
+        self.btn_help = QPushButton(self.tr("Помощь"))
+        self.btn_finish = QPushButton(self.tr("✅ Готово"))
         self.btn_finish.setEnabled(False)
 
         btn_layout.addWidget(self.btn_add)
@@ -364,9 +387,9 @@ class FirstRunWizard(QDialog):
         self.btn_help.setStyleSheet(button_style)
         self.btn_finish.setStyleSheet(button_style)
         
-        self.btn_add.setToolTip("Нажмите, чтобы добавить новую услугу (газ, свет, вода, интернет и т.д.).")
-        self.btn_finish.setToolTip("Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню 'Настройки').")
-        self.btn_help.setToolTip("Нажмите, чтобы получить подробную справку и ознакомиться с руководством пользователя")
+        self.btn_add.setToolTip(self.tr("Нажмите, чтобы добавить новую услугу (газ, свет, вода, интернет и т.д.)."))
+        self.btn_finish.setToolTip(self.tr("Завершить настройку и перейти к главному окну (можно добавить услуги позже через меню 'Настройки')."))
+        self.btn_help.setToolTip(self.tr("Нажмите, чтобы получить подробную справку и ознакомиться с руководством пользователя"))
 
         self.btn_add.clicked.connect(self.add_service)
         self.btn_help.clicked.connect(self.open_help)
@@ -403,12 +426,12 @@ class FirstRunWizard(QDialog):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки не найден."))
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Калькулятор коммуналки")
+        self.setWindowTitle(self.tr("Калькулятор коммуналки"))
         self.move(
             100, 100
         )  # Данное окно появляется на экране с координатами 100 пикселей на 100 пикселей
@@ -456,10 +479,10 @@ class MainWindow(QMainWindow):
         panel_layout.setSpacing(15)
                 
         # Кнопки
-        self.settings_button = QPushButton("Настройки")
+        self.settings_button = QPushButton(self.tr("Настройки"))
         self.settings_button.clicked.connect(self.open_settings)
 
-        self.help_button = QPushButton("Помощь")
+        self.help_button = QPushButton(self.tr("Помощь"))
         self.help_button.clicked.connect(self.open_help)
 
         # Стиль для обеих кнопок
@@ -564,12 +587,13 @@ class MainWindow(QMainWindow):
         locale = QLocale(QLocale.Russian)
         # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
         # Можно изменить под свой вкус
-        datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
+        datetime_str = locale.toString(now, self.tr("dddd, d MMMM yyyy г. HH:mm:ss"))
         self.datetime_label.setText(datetime_str)
 
     def open_settings(self):
         dialog = SettingsWindow(config.services, refresh_callback=None, parent=self)
         if dialog.exec() == QDialog.Accepted:
+            load_settings() # ← перезагружаем объекты из БД
             self.dashboard.update_data()#Обновление дашборда
             if hasattr(self, 'input_panel'):
                 self.input_panel.rebuild_services_ui() # обновляем форму ввода
@@ -584,7 +608,7 @@ class MainWindow(QMainWindow):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки (help.html) не найден."))
 
     def check_verifications(self):
         from datetime import datetime, timedelta
@@ -594,7 +618,7 @@ class MainWindow(QMainWindow):
 
         for key, service in config.services.items():
             # Проверяем только услуги по счётчику
-            if service.get("type") != "metered":
+            if not isinstance(service, MeteredService):
                 continue
 
             next_date_str = service.get('next_verification_date')
@@ -605,13 +629,13 @@ class MainWindow(QMainWindow):
                 next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
                 days_left = (next_date - today).days
                 if 0 <= days_left <= 30:
-                    notifications.append(f"• {service['name']} — {days_left} дн.")
+                    notifications.append(self.tr("• {name} — {days} дн.").format(name=service['name'], days=days_left))
             except:
                 continue
 
         if notifications:
-            msg = "⚠️ Внимание! Приближается поверка счётчиков:\n\n" + "\n".join(notifications)
-            QMessageBox.information(self, "Напоминание о поверке", msg)
+            msg = self.tr("⚠️ Внимание! Приближается поверка счётчиков:\n\n") + "\n".join(notifications)
+            QMessageBox.information(self, self.tr("Напоминание о поверке"), msg)
 
     def open_statistics(self):
         dialog = StatisticsWindow(self)
@@ -642,13 +666,13 @@ class DashboardWidget(QWidget):
             layout.addWidget(self.canvas)
         except ImportError:
             self.canvas = None
-            layout.addWidget(QLabel("Для графиков установите matplotlib"))
+            layout.addWidget(QLabel(self.tr("Для графиков установите matplotlib")))
 
         # Кнопка перехода к вводу
-        enter_btn = QPushButton("📝 Ввести показания")
+        enter_btn = QPushButton(self.tr("📝 Ввести показания"))
 
         # Кнопка статистики
-        stat_btn = QPushButton("Статистика")
+        stat_btn = QPushButton(self.tr("Статистика"))
 
         # Стиль для обеих кнопок
         button_style = """
@@ -700,30 +724,18 @@ class DashboardWidget(QWidget):
                 widget.deleteLater()
 
         # Заголовки
-        self.cards_layout.addWidget(QLabel("<b>Услуга</b>"), 0, 0)
-        self.cards_layout.addWidget(QLabel("<b>Показания</b>"), 0, 1)
-        self.cards_layout.addWidget(QLabel("<b>Тариф</b>"), 0, 2)
+        self.cards_layout.addWidget(QLabel(self.tr("<b>Услуга</b>")), 0, 0)
+        self.cards_layout.addWidget(QLabel(self.tr("<b>Показания</b>")), 0, 1)
+        self.cards_layout.addWidget(QLabel(self.tr("<b>Тариф</b>")), 0, 2)
 
         row = 1
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
-            name = service["name"]
-            tariff = service.get("tariff", 0.0)
-            start_val = service.get("start_value")
-            if start_val is None:
-                start_val = 0.0
-
-            # Проверяем активную поверку
-            active_verif = service.get('active_verification')
-            if active_verif:
-                display_value = "🔴 На поверке"
-            else:
-                display_value = f"{start_val:.2f}"
-
-            self.cards_layout.addWidget(QLabel(name), row, 0)
-            self.cards_layout.addWidget(QLabel(display_value), row, 1)
-            self.cards_layout.addWidget(QLabel(f"{tariff:.2f} руб."), row, 2)
+            card = service.render_dashboard_card()
+            self.cards_layout.addWidget(card["name_label"], row, 0)
+            self.cards_layout.addWidget(card["reading_label"], row, 1)
+            self.cards_layout.addWidget(card["tariff_label"], row, 2)
             row += 1
 
     def update_chart(self):
@@ -745,12 +757,12 @@ class DashboardWidget(QWidget):
         ax = self.figure.add_subplot(111)
         if not df.empty:
             ax.plot(df['month'], df['total_with_fee'], marker='o', linestyle='-', color='#2E86C1')
-            ax.set_title("Расходы по месяцам (текущий год)")
-            ax.set_xlabel("Месяц")
-            ax.set_ylabel("Сумма, руб.")
+            ax.set_title(self.tr("Расходы по месяцам (текущий год)"))
+            ax.set_xlabel(self.tr("Месяц"))
+            ax.set_ylabel(self.tr("Сумма, руб."))
             ax.grid(True, linestyle='--', alpha=0.6)
         else:
-            ax.text(0.5, 0.5, "Нет данных за текущий год", ha='center', va='center')
+            ax.text(0.5, 0.5, self.tr("Нет данных за текущий год"), ha='center', va='center')
         self.canvas.draw()
 
 
@@ -764,10 +776,10 @@ class InputPanel(QWidget):
         layout = QVBoxLayout(self)
 
         # Кнопки
-        self.settings_button = QPushButton("Настройки")
+        self.settings_button = QPushButton(self.tr("Настройки"))
         self.settings_button.clicked.connect(self.open_settings)
 
-        self.help_button = QPushButton("Помощь")
+        self.help_button = QPushButton(self.tr("Помощь"))
         self.help_button.clicked.connect(self.open_help)
 
         # Стиль для обеих кнопок
@@ -828,11 +840,11 @@ class InputPanel(QWidget):
         layout.addWidget(self.services_container)
 
         # Кнопка "Рассчитать"
-        calc_button = QPushButton("Рассчитать")
+        calc_button = QPushButton(self.tr("Рассчитать"))
         calc_button.clicked.connect(self.calculate)
 
         #Кнопка "Назад"
-        back_button = QPushButton("Назад")
+        back_button = QPushButton(self.tr("Назад"))
         back_button.clicked.connect(self.go_back.emit)
         
         #Стили для кнопок "Рассчитать" и "Назад"
@@ -876,7 +888,7 @@ class InputPanel(QWidget):
         locale = QLocale(QLocale.Russian)
         # Формат: "Понедельник, 24 мая 2026 г. 15:30:45"
         # Можно изменить под свой вкус
-        datetime_str = locale.toString(now, "dddd, d MMMM yyyy г. HH:mm:ss")
+        datetime_str = locale.toString(now, self.tr("dddd, d MMMM yyyy г. HH:mm:ss"))
         self.datetime_label.setText(datetime_str)
 
     def open_settings(self):
@@ -894,7 +906,7 @@ class InputPanel(QWidget):
         if os.path.exists(help_path):
             webbrowser.open(help_path)
         else:
-            QMessageBox.warning(self, "Ошибка", "Файл справки (help.html) не найден.")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Файл справки (help.html) не найден."))
 
     def rebuild_services_ui(self):
         # Очищаем все строки сетки, кроме первой(с заголовками)
@@ -904,154 +916,56 @@ class InputPanel(QWidget):
         self.checkboxes.clear()
 
         # Заголовки (row 0)
-        header_name = QLabel("<b>Ресурс</b>")
+        header_name = QLabel(self.tr("<b>Ресурс</b>"))
         header_name.setAlignment(
             Qt.AlignLeft | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по левому краю горизонтально и по центру вертикально
         self.grid_layout.addWidget(header_name, 0, 0)
-        header_value = QLabel("<b>Показания</b>")
+        header_value = QLabel(self.tr("<b>Показания</b>"))
         header_value.setAlignment(
             Qt.AlignCenter | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по центру горизонтально и вертикально
         self.grid_layout.addWidget(header_value, 0, 1)
-        header_comm = QLabel("<b>Комиссия</b>")
+        header_comm = QLabel(self.tr("<b>Комиссия</b>"))
         header_comm.setAlignment(
             Qt.AlignCenter | Qt.AlignVCenter
         )  # Устанавливаем выравнивание по центру горизонтально и вертикально
         self.grid_layout.addWidget(header_comm, 0, 2)
-        header_actions = QLabel("<b>Действия</b>")
+        header_actions = QLabel(self.tr("<b>Действия</b>"))
         self.grid_layout.addWidget(header_actions, 0, 3)
         # Устанавливаем выравнивание по центру горизонтально и вертикально
-        header_info = QLabel("<b>Информация</b>")
+        header_info = QLabel(self.tr("<b>Информация</b>"))
         self.grid_layout.addWidget(header_info, 0, 4)
+
+        # Настройка растяжения колонок
+        self.grid_layout.setColumnStretch(0, 1)  # первая колонка растягивается
+        self.grid_layout.setColumnStretch(1, 0)  # вторая – фиксированной ширины
+        self.grid_layout.setColumnStretch(2, 0)  # третья – фиксированной ширины
+        self.grid_layout.setColumnStretch(3, 0)  # для кнопки действия
+        self.grid_layout.setColumnStretch(4, 0)  # для кнопки реквизитов
 
         row = 1
         # Проходим по всем услугам из config
         for key, service in config.services.items():
             if not service.get("enabled", True):
                 continue
-            # Название услуги с тарифом
-            name = service["name"]
-            tariff = service.get("tariff", 0.0)
-            name_text = f"<b>{name.upper()}</b> (тариф {tariff: .2f})"
-            name_label = QLabel(name_text)
-            name_label.setWordWrap(True)  # Перенос длинных слов
+            widgets = service.render_input_row(self)
+
+            self.grid_layout.addWidget(widgets["name_label"], row, 0)
+            self.grid_layout.addWidget(widgets["value_widget"], row, 1)
             self.grid_layout.addWidget(
-                name_label, row, 0
-            )  # Размещаем название услуги в сетке в первом столбце
+                widgets["commission_cb"], row, 2, alignment=Qt.AlignCenter)
+            self.grid_layout.addWidget(
+                widgets["action_widget"], row, 3, alignment=Qt.AlignCenter)
+            self.grid_layout.addWidget(
+                widgets["provider_btn"], row, 4, alignment=Qt.AlignCenter)
 
-            # Поле ввода или метка для фиксированных услуг
-            if service["type"] == "metered":
-                entry = QLineEdit()
-                entry.setFixedWidth(200)  # фиксированная ширина
-                self.grid_layout.addWidget(
-                    entry, row, 1
-                )  # Размещаем окно ввода в сетке во втором столбце
-                self.entries[key] = entry
-            else:
-                label = QLabel("Показания счетчика не требуются")
-                label.setFixedWidth(200)
-                label.setAlignment(Qt.AlignCenter)  # Выравниваем по центру
-                self.grid_layout.addWidget(
-                    label, row, 1
-                )  # Размещаем виджет в сетке во втором столбце
-
-            # Чекбокс комиссии
-            cb = QCheckBox()
-            fee = service.get('fee')  # может быть None или число
-            if fee is not None:
-                cb.setText(f"{int(fee*100)}%")
-            else:
-                cb.setText("Мой банк берёт комиссию")
-
-            def on_checkbox_toggled(checked, key=key, cb=cb, service=service):
-                if not checked:
-                    return
-                if service.get('fee') is not None:
-                    return
-                # Комиссия не задана – открываем диалог
-                dialog = QDialog(self)
-                dialog.setStyleSheet("background-color: white;")#Прописываем белый фон окна (так как по умолчанию он черный)
-                dialog.setWindowTitle("Настройка комиссии банка")
-                dialog.setMinimumWidth(300)
-                layout = QVBoxLayout(dialog)
-                layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк за оплату данной услуги:"))
-                percent_edit = QLineEdit()
-                layout.addWidget(percent_edit)
-                buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-                buttons.accepted.connect(dialog.accept)
-                buttons.rejected.connect(dialog.reject)
-                layout.addWidget(buttons)
-                if dialog.exec():
-                    try:
-                        percent = float(percent_edit.text())
-                        if percent < 0 or percent > 100:
-                            raise ValueError
-                        service['fee'] = percent / 100.0
-                        save_services()
-                        cb.setText(f"{int(percent)}%")
-                    except:
-                        QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
-                        cb.blockSignals(True)
-                        cb.setChecked(False)
-                        cb.blockSignals(False)
-                else:
-                    cb.blockSignals(True)
-                    cb.setChecked(False)
-                    cb.blockSignals(False)
-
-            cb.toggled.connect(on_checkbox_toggled)
-            self.checkboxes[key] = cb
-            self.grid_layout.addWidget(cb, row, 2, alignment=Qt.AlignCenter)
-
-            if service["type"] == "metered":
-                counter_btn = QPushButton("🔧 Счётчик")
-                counter_btn.setFixedWidth(130)
-                counter_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e0e0e0;
-                        border: 1px solid #aaa;
-                        border-radius: 4px;
-                        padding: 4px;
-                    }
-                    QPushButton:hover {
-                        background-color: #c0c0c0;
-                    }
-                    QPushButton:pressed {
-                        background-color: #a0a0a0;
-                    }
-                """)
-                counter_btn.clicked.connect(lambda checked, k=key: self.show_counter_actions(k))
-                self.grid_layout.addWidget(counter_btn, row, 3, alignment=Qt.AlignCenter)
-            else:
-                self.grid_layout.addWidget(QLabel(""), row, 3)
-            # Кнопки реквизитов
-            provider_btn = QPushButton("🏦 Реквизиты")
-            provider_btn.setFixedWidth(130)
-            provider_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e0e0e0;
-                        border: 1px solid #aaa;
-                        border-radius: 4px;
-                        padding: 4px;
-                    }
-                    QPushButton:hover {
-                        background-color: #c0c0c0;
-                    }
-                    QPushButton:pressed {
-                        background-color: #a0a0a0;
-                    }
-                """)
-            provider_btn.clicked.connect(lambda checked, k=key: self.show_provider_info(k))
-            self.grid_layout.addWidget(provider_btn, row, 4, alignment=Qt.AlignCenter)
+            if widgets["entry"] is not None:
+                self.entries[key] = widgets["entry"]
+            self.checkboxes[key] = widgets["checkbox"]
 
             row += 1
 
-            # # Настраиваем растяжение колонок
-            self.grid_layout.setColumnStretch(0, 1)  # первая колонка растягивается
-            self.grid_layout.setColumnStretch(1, 0)  # вторая – фиксированной ширины
-            self.grid_layout.setColumnStretch(2, 0)  # третья – фиксированной ширины
-        
         # Добавляем растягивающуюся пустую строку
         self.grid_layout.setRowStretch(row, 1)
         # Для всех предыдущих строк (с услугами) устанавливаем растяжение 0
@@ -1076,7 +990,7 @@ class InputPanel(QWidget):
         service = services.get(service_key)
 
         if not service:
-            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена"))
             return
 
         provider_id = service.get('provider_id')
@@ -1101,15 +1015,74 @@ class InputPanel(QWidget):
             if self.parent() and hasattr(self.parent(), 'dashboard'):
                 self.parent().dashboard.update_data()
     
+    def _counter_menu(self, service_key):
+        """Возвращает список действий (текст, обработчик) для текущего meter_state."""
+        import config
+
+        def placeholder(message=None):
+            if message is None:
+                message = self.tr("Будет доступно в следующей версии")
+            def _show():
+                QMessageBox.information(self, self.tr("Информация"), message)
+            return _show
+
+        def continue_work():
+            service = config.services.get(service_key)
+            if service is not None:
+                service.meter_state = 'active'
+                save_services()
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+        service = config.services.get(service_key)
+        state = (service.meter_state if service is not None and service.type == 'metered' else None) or 'active'
+
+        if state == 'active':
+            return [
+                (self.tr("🔁 Замена счётчика"), lambda: self.replace_meter(service_key)),
+                (self.tr("🔍 Поверка счётчика"), lambda: self.show_verification_dialog(service_key)),
+                (self.tr("🔧 Ремонт счётчика"), lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
+                (self.tr("⛔ Снять счётчик"), lambda: self.remove_meter(service_key)),
+                (self.tr("❌ Отмена"), None),
+            ]
+        if state == 'on_verification':
+            return [
+                (self.tr("✅ Завершить поверку"), lambda: self.show_verification_dialog(service_key)),
+                (self.tr("↩️ Отменить поверку"), placeholder()),
+                (self.tr("❌ Отмена"), None),
+            ]
+        if state == 'on_repair':
+            return [
+                (self.tr("✅ Завершить ремонт"), lambda: self.show_verification_dialog(service_key, default_event_type='on_repair')),
+                (self.tr("↩️ Отменить ремонт"), placeholder()),
+                (self.tr("❌ Отмена"), None),
+            ]
+        if state == 'removed':
+            return [
+                (self.tr("🆕 Установить новый счётчик"), lambda: self.install_meter(service_key)),
+                (self.tr("❌ Отмена"), None),
+            ]
+        if state == 'replaced':
+            return [
+                (self.tr("✅ Продолжить работу"), continue_work),
+                (self.tr("❌ Отмена"), None),
+            ]
+        return [
+            (self.tr("🔁 Замена счётчика"), lambda: self.replace_meter(service_key)),
+            (self.tr("🔍 Поверка счётчика"), lambda: self.show_verification_dialog(service_key)),
+            (self.tr("❌ Отмена"), None),
+        ]
+
     def show_counter_actions(self, service_key):
-        """Открывает диалог выбора действия со счётчиком."""
+        """Открывает диалог выбора действия со счётчиком (зависит от meter_state)."""
         dialog = QDialog(self)
-        dialog.setWindowTitle("Действия со счётчиком")
+        dialog.setWindowTitle(self.tr("Действия со счётчиком"))
         dialog.setMinimumWidth(300)
         dialog.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(dialog)
 
-        label = QLabel("Выберите действие для счётчика:")
+        label = QLabel(self.tr("Выберите действие для счётчика:"))
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
 
@@ -1128,41 +1101,51 @@ class InputPanel(QWidget):
                     }
                 """)
 
-        btn_replace = QPushButton("🔁 Замена счётчика")
-        btn_replace.setStyleSheet(BUTTON_STYLE)
-        btn_replace.clicked.connect(lambda: (dialog.accept(), self.replace_meter(service_key)))
-        layout.addWidget(btn_replace)
-
-        btn_verify = QPushButton("🔍 Поверка счётчика")
-        btn_verify.setStyleSheet(BUTTON_STYLE)
-        btn_verify.clicked.connect(lambda: (dialog.accept(), self.show_verification_dialog(service_key)))
-        layout.addWidget(btn_verify)
-
-        cancel_btn = QPushButton("Отмена")
-        cancel_btn.setStyleSheet(BUTTON_STYLE)
-        cancel_btn.clicked.connect(dialog.reject)
-        layout.addWidget(cancel_btn)
+        for text, handler in self._counter_menu(service_key):
+            btn = QPushButton(text)
+            btn.setStyleSheet(BUTTON_STYLE)
+            if handler is None:
+                btn.clicked.connect(dialog.reject)
+            else:
+                btn.clicked.connect(lambda checked=False, h=handler: (dialog.accept(), h()))
+            layout.addWidget(btn)
 
         dialog.exec()
 
-    def show_verification_dialog(self, service_key):
+    def show_verification_dialog(self, service_key, default_event_type=None):
         from database import get_active_verification, get_service_id_by_key
         from file_manager import load_settings
 
         service_id = get_service_id_by_key(service_key)
         if service_id is None:
-            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена"))
             return
 
         active = get_active_verification(service_id)
         if active:
             # Если есть активная поверка – открываем редактирование
-            dialog = VerificationDialog(service_key, active['id'], self)
+            dialog = VerificationDialog(service_key, active['id'], self, default_event_type=default_event_type)
         else:
-            dialog = VerificationDialog(service_key, None, self)
+            dialog = VerificationDialog(service_key, None, self, default_event_type=default_event_type)
 
         if dialog.exec():
             load_settings()
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+    def remove_meter(self, service_key):
+        """Снять счётчик: официально демонтируем (расчёт по тарифу)."""
+        dialog = RemoveMeterDialog(service_key, self)
+        if dialog.exec() == QDialog.Accepted:
+            self.rebuild_services_ui()
+            if self.parent() and hasattr(self.parent(), 'dashboard'):
+                self.parent().dashboard.update_data()
+
+    def install_meter(self, service_key):
+        """Установить новый счётчик: возвращаем услугу в активное состояние."""
+        dialog = InstallMeterDialog(service_key, self)
+        if dialog.exec() == QDialog.Accepted:
             self.rebuild_services_ui()
             if self.parent() and hasattr(self.parent(), 'dashboard'):
                 self.parent().dashboard.update_data()
@@ -1218,7 +1201,7 @@ class ResultWindow(QDialog):
                   verification_ids_used, norm_verification_ids
                  ):
         super().__init__()
-        self.setWindowTitle("Результаты расчёта")
+        self.setWindowTitle(self.tr("Результаты расчёта"))
         self.setFixedWidth(850)  # фиксируем ширину окна
         self.results_data = results_data
         self.current_readings = current_readings
@@ -1240,14 +1223,14 @@ class ResultWindow(QDialog):
         self.table.setColumnCount(8)  # Задаем количество столбцов таблицы
         self.table.setHorizontalHeaderLabels(
             [
-                "Ресурс",
-                "Начало",
-                "Конец",
-                "Расход",
-                "Тариф",
-                "Сумма",
-                "Комиссия",
-                "Итого",
+                self.tr("Ресурс"),
+                self.tr("Начало"),
+                self.tr("Конец"),
+                self.tr("Расход"),
+                self.tr("Тариф"),
+                self.tr("Сумма"),
+                self.tr("Комиссия"),
+                self.tr("Итого"),
             ]
         )
         self.table.setRowCount(len(results_data))
@@ -1286,7 +1269,7 @@ class ResultWindow(QDialog):
         self.total_grid_layout.setHorizontalSpacing(10)
         layout.addWidget(total_container)
 
-        total_amount_name = QLabel(f"<b>Итого без комиссии: {total_amount:.2f}</b>")
+        total_amount_name = QLabel(self.tr("<b>Итого без комиссии: {t}</b>").format(t=f"{total_amount:.2f}"))
         total_amount_name.setAlignment(
             Qt.AlignLeft
         )  # Устанавливаем выравнивание по левому краю
@@ -1294,7 +1277,7 @@ class ResultWindow(QDialog):
             total_amount_name, 0, 0
         )  # Разместили header_name в 1 столбце 1 строки сетки
 
-        total_fee_name = QLabel(f"<b>Итого комиссия: {total_fee:.2f}</b>")
+        total_fee_name = QLabel(self.tr("<b>Итого комиссия: {t}</b>").format(t=f"{total_fee:.2f}"))
         total_fee_name.setAlignment(
             Qt.AlignLeft
         )  # Устанавливаем выравнивание по левому краю
@@ -1303,7 +1286,7 @@ class ResultWindow(QDialog):
         )  # Разместили header_name в 2 столбце 1 строки сетки
 
         total_sum_with_fee_name = QLabel(
-            f"<b>Всего с комиссией: {total_sum_with_fee:.2f}</b>"
+            self.tr("<b>Всего с комиссией: {t}</b>").format(t=f"{total_sum_with_fee:.2f}")
         )
         total_sum_with_fee_name.setAlignment(
             Qt.AlignLeft
@@ -1314,8 +1297,8 @@ class ResultWindow(QDialog):
 
         # Кнопки
         button_layout = QHBoxLayout()
-        self.save_btn = QPushButton("✅ Сохранить и закрыть")
-        self.close_btn = QPushButton("❌ Закрыть без сохранения")
+        self.save_btn = QPushButton(self.tr("✅ Сохранить и закрыть"))
+        self.close_btn = QPushButton(self.tr("❌ Закрыть без сохранения"))
         button_layout.addWidget(self.save_btn)
         button_layout.addWidget(self.close_btn)
         # Добавляем button_layout в основной layout (в конец)
@@ -1354,7 +1337,7 @@ class ResultWindow(QDialog):
                 # Если услуга не найдена — пропускаем
                 continue
             # Если услуга фиксированная — всегда добавляем
-            if service.get("type") == "fixed":
+            if isinstance(service, FixedService):
                 filtered_results.append(data)
                 continue
             # Для услуг по счётчику проверяем Start value
@@ -1412,7 +1395,7 @@ class ResultWindow(QDialog):
 
         # Обновляем начальные значения
         for key, reading in self.current_readings.items():
-            if key in self.services and self.services[key]["type"] == "metered":
+            if key in self.services and isinstance(self.services[key], MeteredService):
                 self.services[key]["start_value"] = reading
 
         # Очищаем использованные замены из self.services
@@ -1426,11 +1409,11 @@ class ResultWindow(QDialog):
         save_settings()
 
         # Показываем сообщение
-        msg = "Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n"
+        msg = self.tr("Показания сохранены!\n\nНовые начальные значения для следующего месяца:\n")
         for key, reading in self.current_readings.items():
             service_name = self.services[key].get("name", key)
             msg += f"{service_name}: {reading}\n"
-        QMessageBox.information(self, "Готово", msg)
+        QMessageBox.information(self, self.tr("Готово"), msg)
 
         self.accept()
 
@@ -1458,49 +1441,49 @@ class AddServiceDialog(QDialog):
     def __init__(self, services, parent=None):
         super().__init__(parent)
         self.services = services
-        self.setWindowTitle("Добавление услуги")
+        self.setWindowTitle(self.tr("Добавление услуги"))
         self.setMinimumWidth(400)
         layout = QVBoxLayout(self)
 
         # Название услуги
-        layout.addWidget(QLabel("Название услуги:"))
+        layout.addWidget(QLabel(self.tr("Название услуги:")))
         self.name_edit = QLineEdit()
-        self.name_edit.setToolTip("Введите название услуги, которую вы хотите добавить (например, 'Газ', 'Электричество').")
+        self.name_edit.setToolTip(self.tr("Введите название услуги, которую вы хотите добавить (например, 'Газ', 'Электричество')."))
         layout.addWidget(self.name_edit)
 
         # Тип услуги
-        layout.addWidget(QLabel("Тип:"))
+        layout.addWidget(QLabel(self.tr("Тип:")))
         self.type_combo = QComboBox()
-        self.type_combo.addItems(["По счётчику", "Фиксированная"])
-        self.type_combo.setToolTip(
+        self.type_combo.addItems([self.tr("По счётчику"), self.tr("Фиксированная")])
+        self.type_combo.setToolTip(self.tr(
             "Выберите тип услуги:\n"
             "- По счётчику: если вы снимаете показания счётчика для расчёта (газ, свет, вода).\n"
             "- Фиксированная: если платёж не зависит от потребления (интернет, мусор, капремонт)."
-        )
+        ))
         layout.addWidget(self.type_combo)
 
         # Начальное значение (для по счётчику)
-        self.start_label = QLabel("Начальное значение:")
+        self.start_label = QLabel(self.tr("Начальное значение:"))
         self.start_edit = QLineEdit()
-        self.start_edit.setToolTip(
+        self.start_edit.setToolTip(self.tr(
             "Введите показания счётчика, которые были у вас в прошлом месяце.\n"
             "Для новой услуги – начальное значение обычно равно 0."
-        )
+        ))
         layout.addWidget(self.start_label)
         layout.addWidget(self.start_edit)
 
         # Тариф
-        layout.addWidget(QLabel("Тариф (руб.):"))
+        layout.addWidget(QLabel(self.tr("Тариф (руб.):")))
         self.tariff_edit = QLineEdit()
-        self.tariff_edit.setToolTip(
+        self.tariff_edit.setToolTip(self.tr(
             "Введите стоимость за единицу потребления услуги (например, за 1 кВт·ч электроэнергии)."
-        )
+        ))
         layout.addWidget(self.tariff_edit)
 
         # Включена ли услуга
-        self.enabled_check = QCheckBox("Включена")
+        self.enabled_check = QCheckBox(self.tr("Включена"))
         self.enabled_check.setChecked(True)
-        self.enabled_check.setToolTip("Если галочка снята, услуга не будет отображаться в главном окне и не будет учитываться в расчётах.")
+        self.enabled_check.setToolTip(self.tr("Если галочка снята, услуга не будет отображаться в главном окне и не будет учитываться в расчётах."))
         layout.addWidget(self.enabled_check)
 
         # Кнопки
@@ -1524,7 +1507,7 @@ class AddServiceDialog(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(buttons)
 
         # Логика: при изменении типа скрывать/показывать поле начального значения
@@ -1532,7 +1515,7 @@ class AddServiceDialog(QDialog):
         self.update_visibility()
 
     def update_visibility(self):
-        is_metered = self.type_combo.currentText() == "По счётчику"
+        is_metered = self.type_combo.currentText() == self.tr("По счётчику")
         self.start_label.setVisible(is_metered)
         self.start_edit.setVisible(is_metered)
 
@@ -1540,20 +1523,20 @@ class AddServiceDialog(QDialog):
         # Валидация и добавление услуги
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "Ошибка", "Введите название услуги")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Введите название услуги"))
             return
         key = name.lower().replace(' ', '_')
         if key in self.services:
-            QMessageBox.warning(self, "Ошибка", "Услуга с таким названием уже существует")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга с таким названием уже существует"))
             return
 
-        service_type = "metered" if self.type_combo.currentText() == "По счётчику" else "fixed"
+        service_type = "metered" if self.type_combo.currentText() == self.tr("По счётчику") else "fixed"
         try:
             tariff = float(normalize_decimal(self.tariff_edit.text().strip()))
             if tariff <= 0:
                 raise ValueError
         except:
-            QMessageBox.warning(self, "Ошибка", "Тариф должен быть положительным числом")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Тариф должен быть положительным числом"))
             return
 
         new_service = {
@@ -1570,10 +1553,10 @@ class AddServiceDialog(QDialog):
                     raise ValueError
                 new_service["start_value"] = start_val
             except:
-                QMessageBox.warning(self, "Ошибка", "Начальное значение должно быть неотрицательным числом")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Начальное значение должно быть неотрицательным числом"))
                 return
 
-        self.services[key] = new_service
+        self.services[key] = BaseService.from_dict(new_service, key=key)
         save_services()
         super().accept()
 
@@ -1583,43 +1566,43 @@ class EditServiceDialog(QDialog):
         self.services = services
         self.key = key
         self.service = services[key]
-        self.setWindowTitle(f"Редактирование услуги: {self.service['name']}")
+        self.setWindowTitle(self.tr("Редактирование услуги: {name}").format(name=self.service['name']))
         self.setMinimumWidth(400)
 
         layout = QVBoxLayout(self)
 
         # Название
-        layout.addWidget(QLabel("Название услуги:"))
+        layout.addWidget(QLabel(self.tr("Название услуги:")))
         self.name_edit = QLineEdit(self.service["name"])
         layout.addWidget(self.name_edit)
 
         # Тип (нельзя изменить, только показать)
-        layout.addWidget(QLabel("Тип:"))
-        type_text = "По счётчику" if self.service["type"] == "metered" else "Фиксированная"
+        layout.addWidget(QLabel(self.tr("Тип:")))
+        type_text = self.tr("По счётчику") if isinstance(self.service, MeteredService) else self.tr("Фиксированная")
         type_label = QLabel(type_text)
         layout.addWidget(type_label)
 
         # Начальное значение (только для metered)
-        if self.service["type"] == "metered":
-            layout.addWidget(QLabel("Начальное значение:"))
+        if isinstance(self.service, MeteredService):
+            layout.addWidget(QLabel(self.tr("Начальное значение:")))
             self.start_edit = QLineEdit(str(self.service.get("start_value", 0)))
             layout.addWidget(self.start_edit)
         else:
             self.start_edit = None
 
         # Тариф
-        layout.addWidget(QLabel("Тариф (руб.):"))
+        layout.addWidget(QLabel(self.tr("Тариф (руб.):")))
         self.tariff_edit = QLineEdit(str(self.service["tariff"]))
         layout.addWidget(self.tariff_edit)
 
         # Комиссия (%)
-        layout.addWidget(QLabel("Комиссия (%):"))
-        fee_percent = int(self.service.get("fee", 0.0) * 100)
+        layout.addWidget(QLabel(self.tr("Комиссия (%):")))
+        fee_percent = int((self.service.get("fee") or 0.0) * 100)
         self.fee_edit = QLineEdit(str(fee_percent))
         layout.addWidget(self.fee_edit)
 
         # Включена
-        self.enabled_check = QCheckBox("Включена")
+        self.enabled_check = QCheckBox(self.tr("Включена"))
         self.enabled_check.setChecked(self.service.get("enabled", True))
         layout.addWidget(self.enabled_check)
 
@@ -1644,10 +1627,10 @@ class EditServiceDialog(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(buttons)
 
-        self.replace_button = QPushButton("Замена счётчика")
+        self.replace_button = QPushButton(self.tr("Замена счётчика"))
         self.replace_button.clicked.connect(self.replace_meter)
         layout.addWidget(self.replace_button)
 
@@ -1660,12 +1643,12 @@ class EditServiceDialog(QDialog):
     def accept(self):
         name = self.name_edit.text().strip()
         if not name:
-            QMessageBox.warning(self, "Ошибка", "Название услуги не может быть пустым")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Название услуги не может быть пустым"))
             return
         # Если имя изменилось, обновим ключ
         new_key = name.lower().replace(' ', '_')
         if new_key != self.key and new_key in self.services:
-            QMessageBox.warning(self, "Ошибка", "Услуга с таким названием уже существует")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга с таким названием уже существует"))
             return
 
         try:
@@ -1673,7 +1656,7 @@ class EditServiceDialog(QDialog):
             if tariff <= 0:
                 raise ValueError
         except:
-            QMessageBox.warning(self, "Ошибка", "Тариф должен быть положительным числом")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Тариф должен быть положительным числом"))
             return
 
         try:
@@ -1682,30 +1665,40 @@ class EditServiceDialog(QDialog):
                 raise ValueError
             fee = fee_percent / 100.0
         except:
-            QMessageBox.warning(self, "Ошибка", "Комиссия должна быть числом от 0 до 100")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Комиссия должна быть числом от 0 до 100"))
             return
 
         updated = {
+            "id": self.service.id,
             "name": name,
             "type": self.service["type"],
             "enabled": self.enabled_check.isChecked(),
             "tariff": tariff,
-            "fee": fee
+            "fee": fee,
+            "provider_id": self.service.provider_id,
         }
-        if self.service["type"] == "metered" and self.start_edit:
+        if isinstance(self.service, MeteredService) and self.start_edit:
             try:
                 start_val = float(normalize_decimal(self.start_edit.text().strip()))
                 if start_val < 0:
                     raise ValueError
                 updated["start_value"] = start_val
             except:
-                QMessageBox.warning(self, "Ошибка", "Начальное значение должно быть неотрицательным числом")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Начальное значение должно быть неотрицательным числом"))
                 return
+
+        # Сохраняем состояние объекта, которое диалог не редактирует
+        # (замены, поверки), чтобы не потерять его при пересоздании объекта.
+        if isinstance(self.service, BaseService):
+            updated["replacements"] = self.service.replacements
+            updated["active_verification"] = self.service.active_verification
+            updated["last_completed_verification"] = self.service.last_completed_verification
+            updated["next_verification_date"] = self.service.next_verification_date
 
         # Удаляем старый ключ, если изменился
         if new_key != self.key:
             del self.services[self.key]
-        self.services[new_key] = updated
+        self.services[new_key] = BaseService.from_dict(updated, key=new_key)
         save_services()
         super().accept()
 
@@ -1714,19 +1707,19 @@ class MeterReplacementDialog(QDialog):
         super().__init__(parent)
         self.setStyleSheet("background-color: white;")#Прописываем белый фон окна (так как по умолчанию он черный)
         self.service_key = service_key
-        self.setWindowTitle("Замена счётчика")
+        self.setWindowTitle(self.tr("Замена счётчика"))
         self.setMinimumWidth(300)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Показания старого счётчика на момент замены:"))
+        layout.addWidget(QLabel(self.tr("Показания старого счётчика на момент замены:")))
         self.old_edit = QLineEdit()
         layout.addWidget(self.old_edit)
-        layout.addWidget(QLabel("Показания нового счётчика на момент установки:"))
+        layout.addWidget(QLabel(self.tr("Показания нового счётчика на момент установки:")))
         self.new_edit = QLineEdit()
         layout.addWidget(self.new_edit)
-        layout.addWidget(QLabel("Дата (необязательно, в формате ГГГГ-ММ-ДД):"))
+        layout.addWidget(QLabel(self.tr("Дата (необязательно, в формате ГГГГ-ММ-ДД):")))
         self.date_edit = QLineEdit()
         layout.addWidget(self.date_edit)
-        self.pay_consumption_check = QCheckBox("Оплатить расход по старому счётчику")
+        self.pay_consumption_check = QCheckBox(self.tr("Оплатить расход по старому счётчику"))
         layout.addWidget(self.pay_consumption_check)
 
 
@@ -1751,16 +1744,16 @@ class MeterReplacementDialog(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(buttons)
 
     def ask_fee_percent(self):
         dialog = QDialog(self)
-        dialog.setWindowTitle("Настройка комиссии банка")
+        dialog.setWindowTitle(self.tr("Настройка комиссии банка"))
         dialog.setMinimumWidth(300)
         dialog.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк:"))
+        layout.addWidget(QLabel(self.tr("Укажите размер комиссии (в процентах), которую берёт банк:")))
         percent_edit = QLineEdit()
         layout.addWidget(percent_edit)
 
@@ -1785,7 +1778,7 @@ class MeterReplacementDialog(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.Accepted:
@@ -1795,7 +1788,7 @@ class MeterReplacementDialog(QDialog):
                     raise ValueError
                 return percent
             except:
-                QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Введите число от 0 до 100"))
                 return None
         return None
 
@@ -1811,13 +1804,13 @@ class MeterReplacementDialog(QDialog):
             old_final = float(normalize_decimal(self.old_edit.text()))
             new_start = float(normalize_decimal(self.new_edit.text()))
         except:
-            QMessageBox.warning(self, "Ошибка", "Введите корректные числа")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Введите корректные числа"))
             return
 
         #Получаем числовой идентификатор (ID) услуги из таблицы services по её строковому ключу (self.service_key)
         service_id = get_service_id_by_key(self.service_key)
         if service_id is None:
-            QMessageBox.warning(self, "Ошибка", "Услуга не найдена в базе данных")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена в базе данных"))
             return
 
         date_str = self.date_edit.text().strip()
@@ -1833,20 +1826,20 @@ class MeterReplacementDialog(QDialog):
             # Получаем данные услуги
             service = services.get(self.service_key)
             if not service:
-                QMessageBox.warning(self, "Ошибка", "Услуга не найдена в config")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена в config"))
                 return
 
             start_value = Decimal(service.get('start_value', 0))
             old_final_dec = Decimal(old_final)
             tariff = Decimal(service.get('tariff', 0))
-            fee = Decimal(service.get('fee', 0.0))
+            fee = Decimal(service.get('fee') or 0.0)
 
             # Расход до замены
             consumption = max(old_final_dec - start_value, Decimal('0'))
             amount = consumption * tariff
 
             # Открываем диалог подтверждения
-            items = [("Расход до замены", float(amount))]
+            items = [(self.tr("Расход до замены"), float(amount))]
             confirm = PaymentConfirmationDialog(items, service['name'], self)
             if confirm.exec() != QDialog.Accepted:
                 return  # пользователь отменил
@@ -1903,7 +1896,7 @@ class MeterReplacementDialog(QDialog):
             from database import mark_replacements_paid
             mark_replacements_paid([replacement_id], bill_id)
 
-            QMessageBox.information(self, "Успешно", "Замена сохранена и оплачена")
+            QMessageBox.information(self, self.tr("Успешно"), self.tr("Замена сохранена и оплачена"))
         else:
             # Если оплата не требуется — просто обновляем интерфейс
             from file_manager import load_settings
@@ -1920,11 +1913,12 @@ class ClickToSelectLineEdit(QLineEdit):
         self.selectAll()
 
 class VerificationDialog(QDialog):
-    def __init__(self, service_key, verification_id=None, parent=None):
+    def __init__(self, service_key, verification_id=None, parent=None, default_event_type=None):
         super().__init__(parent)
         self.service_key = service_key
         self.verification_id = verification_id
-        self.setWindowTitle("Поверка счётчика" if not verification_id else "Редактирование поверки")
+        self.default_event_type = default_event_type
+        self.setWindowTitle(self.tr("Поверка счётчика") if not verification_id else self.tr("Редактирование поверки"))
         self.setMinimumWidth(450)
         self.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(self)
@@ -1941,7 +1935,7 @@ class VerificationDialog(QDialog):
         self.date_end_edit.setCalendarPopup(True)
         self.date_end_edit.setDisplayFormat("dd.MM.yyyy")
         self.date_end_edit.setDate(QDate.currentDate())
-        self.date_end_edit.setSpecialValueText("Не завершена")
+        self.date_end_edit.setSpecialValueText(self.tr("Не завершена"))
         self.date_end_edit.setEnabled(False)
 
         self.amount_norm_edit = ClickToSelectLineEdit()
@@ -1950,21 +1944,21 @@ class VerificationDialog(QDialog):
         self.next_verification_date_edit.setDisplayFormat("dd.MM.yyyy")
         self.next_verification_date_edit.setDate(QDate.currentDate().addYears(3))
 
-        self.completed_check = QCheckBox("Счётчик установлен обратно")
+        self.completed_check = QCheckBox(self.tr("Счётчик установлен обратно"))
         self.completed_check.toggled.connect(self.on_completed_toggled)
 
         # --- Новые чекбоксы для оплаты ---
-        self.pay_consumption_check = QCheckBox("Оплатить расход на момент снятия")
-        self.pay_norm_check = QCheckBox("Оплатить сумму по нормативу")        
+        self.pay_consumption_check = QCheckBox(self.tr("Оплатить расход на момент снятия"))
+        self.pay_norm_check = QCheckBox(self.tr("Оплатить сумму по нормативу"))        
 
         # Форма
         fields = [
-            ("Показания на момент снятия:", self.old_edit),
-            ("Показания на момент установки:", self.new_edit),
-            ("Дата снятия счётчика:", self.date_start_edit),
-            ("Дата установки обратно:", self.date_end_edit),
-            ("Сумма по нормативу (руб.):", self.amount_norm_edit),
-            ("Дата следующей поверки:", self.next_verification_date_edit),
+            (self.tr("Показания на момент снятия:"), self.old_edit),
+            (self.tr("Показания на момент установки:"), self.new_edit),
+            (self.tr("Дата снятия счётчика:"), self.date_start_edit),
+            (self.tr("Дата установки обратно:"), self.date_end_edit),
+            (self.tr("Сумма по нормативу (руб.):"), self.amount_norm_edit),
+            (self.tr("Дата следующей поверки:"), self.next_verification_date_edit),
         ]
         for label, widget in fields:
             row = QHBoxLayout()
@@ -1981,8 +1975,8 @@ class VerificationDialog(QDialog):
             from database import get_verification_by_id
             data = get_verification_by_id(verification_id)
             if data:
-                self.old_edit.setText(str(data.get('old_final', '')))
-                self.new_edit.setText(str(data.get('new_start', '')))
+                self.old_edit.setText(str(data['old_final']) if data.get('old_final') is not None else '')
+                self.new_edit.setText(str(data['new_start']) if data.get('new_start') is not None else '')
                 self.date_start_edit.setDate(QDate.fromString(data['date_start'], "yyyy-MM-dd"))
                 self.pay_consumption_check.setChecked(data.get('is_consumption_paid', False))
                 self.pay_norm_check.setChecked(data.get('is_norm_paid', False))
@@ -1991,7 +1985,7 @@ class VerificationDialog(QDialog):
                     self.completed_check.setChecked(True)
                 else:
                     self.completed_check.setChecked(False)
-                self.amount_norm_edit.setText(str(data.get('amount_norm', '')))
+                self.amount_norm_edit.setText(str(data['amount_norm']) if data.get('amount_norm') is not None else '')
                 if data.get('next_verification_date'):
                     self.next_verification_date_edit.setDate(QDate.fromString(data['next_verification_date'], "yyyy-MM-dd"))
 
@@ -2016,7 +2010,7 @@ class VerificationDialog(QDialog):
         # --- Меняем названия кнопки Cancel ---
         cancel_btn = button_box.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(button_box)
  
     def on_completed_toggled(self, checked):
@@ -2024,37 +2018,50 @@ class VerificationDialog(QDialog):
         self.new_edit.setEnabled(checked)  # новые показания нужны только при завершении
         if not checked:
             self.date_end_edit.setDate(QDate())
-            self.date_end_edit.setSpecialValueText("Не завершена")
+            self.date_end_edit.setSpecialValueText(self.tr("Не завершена"))
             self.new_edit.clear()
 
     def get_data(self):
-        old_final = self.old_edit.text().strip()
-        new_start = self.new_edit.text().strip() if self.completed_check.isChecked() else None
+        def to_float(value):
+            if value is None:
+                return None
+            s = str(value).strip()
+            if s == '' or s.lower() == 'none':
+                return None
+            try:
+                return float(s.replace(',', '.'))
+            except ValueError:
+                return None
+
+        old_final = self.old_edit.text()
+        new_start = self.new_edit.text() if self.completed_check.isChecked() else None
         date_start = self.date_start_edit.date().toString("yyyy-MM-dd")
         if self.completed_check.isChecked():
             date_end = self.date_end_edit.date().toString("yyyy-MM-dd")
         else:
             date_end = None
-        amount_norm = self.amount_norm_edit.text().strip()
-        next_verification_date = self.next_verification_date_edit.date().toString("yyyy-MM-dd") if not self.next_verification_date_edit.date().isNull() else None
+        amount_norm = self.amount_norm_edit.text()
+        next_verification_date = (
+            self.next_verification_date_edit.date().toString("yyyy-MM-dd")
+            if not self.next_verification_date_edit.date().isNull() else None
+        )
 
-        data = {
-            'old_final': float(old_final) if old_final else None,
-            'new_start': float(new_start) if new_start else None,
+        return {
+            'old_final': to_float(old_final),
+            'new_start': to_float(new_start),
             'date_start': date_start,
             'date_end': date_end,
-            'amount_norm': float(amount_norm) if amount_norm else None,
+            'amount_norm': to_float(amount_norm),
             'next_verification_date': next_verification_date,
         }
-        return data
 
     def ask_fee_percent(self):
         dialog = QDialog(self)
-        dialog.setWindowTitle("Настройка комиссии банка")
+        dialog.setWindowTitle(self.tr("Настройка комиссии банка"))
         dialog.setMinimumWidth(300)
         dialog.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("Укажите размер комиссии (в процентах), которую берёт банк:"))
+        layout.addWidget(QLabel(self.tr("Укажите размер комиссии (в процентах), которую берёт банк:")))
         percent_edit = QLineEdit()
         layout.addWidget(percent_edit)
 
@@ -2079,7 +2086,7 @@ class VerificationDialog(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.Accepted:
@@ -2089,7 +2096,7 @@ class VerificationDialog(QDialog):
                     raise ValueError
                 return percent
             except:
-                QMessageBox.warning(self, "Ошибка", "Введите число от 0 до 100")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Введите число от 0 до 100"))
                 return None
         return None
 
@@ -2101,24 +2108,32 @@ class VerificationDialog(QDialog):
         from datetime import datetime
 
         data = self.get_data()
+        # Валидация полей при завершении поверки
+        if self.completed_check.isChecked():
+            if data.get('date_end') is None:
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Укажите дату установки счётчика обратно"))
+                return
+            if data.get('new_start') is None:
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Укажите показания счётчика на момент установки"))
+                return
         # Валидация
         if not data['date_start']:
-            QMessageBox.warning(self, "Ошибка", "Дата снятия счётчика обязательна")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Дата снятия счётчика обязательна"))
             return
         if data['old_final'] is None:
-            QMessageBox.warning(self, "Ошибка", "Введите показания на момент снятия")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Введите показания на момент снятия"))
             return
 
         service_id = get_service_id_by_key(self.service_key)
         if service_id is None:
-            QMessageBox.warning(self, "Ошибка", "Услуга не найдена")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена"))
             return
 
         # Сохраняем поверку (создаём или обновляем)
         if self.verification_id:
-            update_verification(self.verification_id, data)
+            update_verification(self.verification_id, data, default_event_type=self.default_event_type)
         else:
-            self.verification_id = add_verification(service_id, data)
+            self.verification_id = add_verification(service_id, data, default_event_type=self.default_event_type)
 
         # --- Немедленная оплата, если чекбоксы активны ---
         pay_consumption = self.pay_consumption_check.isChecked()
@@ -2128,7 +2143,7 @@ class VerificationDialog(QDialog):
             # Получаем текущие данные услуги
             service = services.get(self.service_key)
             if not service:
-                QMessageBox.warning(self, "Ошибка", "Услуга не найдена в config")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Услуга не найдена в config"))
                 return
 
             start_value = Decimal(service.get('start_value', 0))
@@ -2142,18 +2157,18 @@ class VerificationDialog(QDialog):
             if pay_consumption:
                 consumption = max(old_final - start_value, Decimal('0'))
                 amount = consumption * tariff
-                items.append(("Расход до снятия", float(amount)))
+                items.append((self.tr("Расход до снятия"), float(amount)))
                 total_without_fee += amount
 
             # 2. Норматив
             if pay_norm:
                 amount_norm = Decimal(data['amount_norm'] or 0)
                 if amount_norm > 0:
-                    items.append(("Сумма по нормативу", float(amount_norm)))
+                    items.append((self.tr("Сумма по нормативу"), float(amount_norm)))
                     total_without_fee += amount_norm
 
             if not items:
-                QMessageBox.warning(self, "Ошибка", "Нет позиций для оплаты")
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Нет позиций для оплаты"))
                 return
 
             # Открываем диалог подтверждения
@@ -2168,7 +2183,7 @@ class VerificationDialog(QDialog):
             # Определяем процент комиссии
             fee_percent = Decimal('0')
             if apply_fee:
-                service_fee = Decimal(service.get('fee', 0.0))
+                service_fee = Decimal(service.get('fee') or 0.0)
                 if service_fee == 0:
                     # Комиссия не задана — запрашиваем у пользователя
                     percent = self.ask_fee_percent()
@@ -2194,10 +2209,10 @@ class VerificationDialog(QDialog):
                 details.append({
                     'service_key': self.service_key,
                     'service_name': service['name'],
-                    'start_reading': float(start_value) if desc == "Расход до снятия" else None,
-                    'end_reading': float(old_final) if desc == "Расход до снятия" else None,
-                    'consumption': float(amount_d / tariff) if desc == "Расход до снятия" else 0,
-                    'tariff': float(tariff) if desc == "Расход до снятия" else 0,
+                    'start_reading': float(start_value) if desc == self.tr("Расход до снятия") else None,
+                    'end_reading': float(old_final) if desc == self.tr("Расход до снятия") else None,
+                    'consumption': float(amount_d / tariff) if desc == self.tr("Расход до снятия") else 0,
+                    'tariff': float(tariff) if desc == self.tr("Расход до снятия") else 0,
                     'amount': round(float(amount_d), 2),
                     'fee': round(float(fee_amount), 2),
                     'total': round(float(total_item), 2)
@@ -2228,14 +2243,14 @@ class VerificationDialog(QDialog):
             if pay_norm:
                 data['is_norm_paid'] = 1
             if self.verification_id:
-                update_verification(self.verification_id, data)
+                update_verification(self.verification_id, data, default_event_type=self.default_event_type)
 
             from file_manager import load_settings
             load_settings()
 
             msg = QMessageBox(self)
-            msg.setWindowTitle("Успешно")
-            msg.setText("Поверка сохранена и оплачена")
+            msg.setWindowTitle(self.tr("Успешно"))
+            msg.setText(self.tr("Поверка сохранена и оплачена"))
             msg.setIcon(QMessageBox.Information)
 
             # Применяем стиль ко всему диалогу, чтобы все кнопки внутри унаследовали
@@ -2263,7 +2278,7 @@ class SettingsWindow(QDialog):
         super().__init__(parent)
         self.services = services
         self.refresh_callback = refresh_callback  # для обновления главного окна
-        self.setWindowTitle("Настройки")
+        self.setWindowTitle(self.tr("Настройки"))
         self.setWindowIcon(QIcon(resource_path("icon.ico")))
         
         # Основной layout
@@ -2277,32 +2292,42 @@ class SettingsWindow(QDialog):
 
         # Вкладка "Управление услугами"
         self.services_tab = QWidget()
-        self.tab_widget.addTab(self.services_tab, "Управление услугами")
+        self.tab_widget.addTab(self.services_tab, self.tr("Управление услугами"))
         self.setup_services_tab()
 
         # Вкладка "Тарифы"
         self.tariffs_tab = QWidget()
-        self.tab_widget.addTab(self.tariffs_tab, "Изменить тариф")
+        self.tab_widget.addTab(self.tariffs_tab, self.tr("Изменить тариф"))
         self.setup_tariffs_tab()
 
         # Вкладка "Комиссии"
         self.commissions_tab = QWidget()
-        self.tab_widget.addTab(self.commissions_tab, "Изменить комиссию")
+        self.tab_widget.addTab(self.commissions_tab, self.tr("Изменить комиссию"))
         self.setup_commissions_tab()
 
         #Вкладка "Реквизиты"
         self.providers_tab = QWidget()
-        self.tab_widget.addTab(self.providers_tab, "Реквизиты")
+        self.tab_widget.addTab(self.providers_tab, self.tr("Реквизиты"))
         self.setup_providers_tab()
+
+        # Вкладка "История счётчиков"
+        self.history_tab = QWidget()
+        self.tab_widget.addTab(self.history_tab, self.tr("История"))
+        self.setup_history_tab()
+
+        # Вкладка "Язык"
+        self.language_tab = QWidget()
+        self.tab_widget.addTab(self.language_tab, self.tr("Язык"))
+        self.setup_language_tab()
 
         # Кнопки диалога
         button_box = QDialogButtonBox()
-        save_btn = button_box.addButton("Сохранить", QDialogButtonBox.AcceptRole)
-        cancel_btn = button_box.addButton("Отмена", QDialogButtonBox.RejectRole)
+        save_btn = button_box.addButton(self.tr("Сохранить"), QDialogButtonBox.AcceptRole)
+        cancel_btn = button_box.addButton(self.tr("Отмена"), QDialogButtonBox.RejectRole)
         save_btn.clicked.connect(self.save_all)
         cancel_btn.clicked.connect(self.reject)
-        save_btn.setToolTip("Сохранить все изменения и закрыть окно настроек.")
-        cancel_btn.setToolTip("Отменить изменения и закрыть окно.")
+        save_btn.setToolTip(self.tr("Сохранить все изменения и закрыть окно настроек."))
+        cancel_btn.setToolTip(self.tr("Отменить изменения и закрыть окно."))
         layout.addWidget(button_box)
 
         # Заполнение таблиц (они будут обновляться в setup_*)
@@ -2321,7 +2346,7 @@ class SettingsWindow(QDialog):
         # Таблица
         self.tariffs_table = QTableWidget()
         self.tariffs_table.setColumnCount(2)
-        self.tariffs_table.setHorizontalHeaderLabels(["Услуга", "Тариф (руб.)"])
+        self.tariffs_table.setHorizontalHeaderLabels([self.tr("Услуга"), self.tr("Тариф (руб.)")])
         self.tariffs_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.tariffs_table)
         # Заполняем данными из services
@@ -2353,7 +2378,7 @@ class SettingsWindow(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
         self.commissions_table = QTableWidget()
         self.commissions_table.setColumnCount(2)
-        self.commissions_table.setHorizontalHeaderLabels(["Услуга", "Комиссия (%)"])
+        self.commissions_table.setHorizontalHeaderLabels([self.tr("Услуга"), self.tr("Комиссия (%)")])
         self.commissions_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.commissions_table)
         self.update_commissions_table()
@@ -2365,7 +2390,7 @@ class SettingsWindow(QDialog):
             name_item = QTableWidgetItem(service["name"])
             name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
             self.commissions_table.setItem(row, 0, name_item)
-            fee_percent = int(service.get("fee", 0.0) * 100)
+            fee_percent = int((service.get("fee") or 0.0) * 100)
             fee_item = QTableWidgetItem(str(fee_percent))
             self.commissions_table.setItem(row, 1, fee_item)
         #self.commissions_table.resizeColumnsToContents()
@@ -2382,7 +2407,7 @@ class SettingsWindow(QDialog):
         self.services_table = QTableWidget()
         self.services_table.setColumnCount(5)
         self.services_table.setHorizontalHeaderLabels(
-            ["Название", "Тип", "Включена", "Тариф (руб.)", "Комиссия (%)"]
+            [self.tr("Название"), self.tr("Тип"), self.tr("Включена"), self.tr("Тариф (руб.)"), self.tr("Комиссия (%)")]
         )
         self.services_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.services_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -2390,10 +2415,10 @@ class SettingsWindow(QDialog):
 
         # Кнопки управления
         btn_layout = QHBoxLayout()
-        self.btn_add = QPushButton("Добавить")
-        self.btn_edit = QPushButton("Редактировать")
-        self.btn_delete = QPushButton("Удалить")
-        self.btn_toggle = QPushButton("Вкл/Выкл")
+        self.btn_add = QPushButton(self.tr("Добавить"))
+        self.btn_edit = QPushButton(self.tr("Редактировать"))
+        self.btn_delete = QPushButton(self.tr("Удалить"))
+        self.btn_toggle = QPushButton(self.tr("Вкл/Выкл"))
         btn_layout.addWidget(self.btn_add)
         btn_layout.addWidget(self.btn_edit)
         btn_layout.addWidget(self.btn_delete)
@@ -2418,17 +2443,17 @@ class SettingsWindow(QDialog):
             name_item.setData(Qt.UserRole, key)  # сохраняем ключ
             self.services_table.setItem(row, 0, name_item)
 
-            type_item = QTableWidgetItem("По счётчику" if service.get("type") == "metered" else "Фиксированная")
+            type_item = QTableWidgetItem(self.tr("По счётчику") if isinstance(service, MeteredService) else self.tr("Фиксированная"))
             self.services_table.setItem(row, 1, type_item)
 
             enabled = service.get("enabled", True)
-            enabled_item = QTableWidgetItem("Да" if enabled else "Нет")
+            enabled_item = QTableWidgetItem(self.tr("Да") if enabled else self.tr("Нет"))
             self.services_table.setItem(row, 2, enabled_item)
 
             tariff_item = QTableWidgetItem(f"{service.get('tariff', 0.0):.2f}")
             self.services_table.setItem(row, 3, tariff_item)
 
-            fee_percent = int(service.get("fee", 0.0) * 100)
+            fee_percent = int((service.get("fee") or 0.0) * 100)
             fee_item = QTableWidgetItem(f"{fee_percent}")
             self.services_table.setItem(row, 4, fee_item)
 
@@ -2450,7 +2475,7 @@ class SettingsWindow(QDialog):
         # Таблица провайдеров
         self.providers_table = QTableWidget()
         self.providers_table.setColumnCount(5)
-        self.providers_table.setHorizontalHeaderLabels(["ID", "Название", "ИНН", "Банк", "Привязанная услуга"])
+        self.providers_table.setHorizontalHeaderLabels(["ID", self.tr("Название"), self.tr("ИНН"), self.tr("Банк"), self.tr("Привязанная услуга")])
         self.providers_table.hideColumn(0)  # скрываем ID
         self.providers_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.providers_table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -2459,10 +2484,10 @@ class SettingsWindow(QDialog):
 
         # Кнопки управления
         btn_layout = QHBoxLayout()
-        self.btn_add_provider = QPushButton("Добавить")
-        self.btn_edit_provider = QPushButton("Редактировать")
-        self.btn_delete_provider = QPushButton("Удалить")
-        self.btn_attach_provider = QPushButton("Привязать к услуге")
+        self.btn_add_provider = QPushButton(self.tr("Добавить"))
+        self.btn_edit_provider = QPushButton(self.tr("Редактировать"))
+        self.btn_delete_provider = QPushButton(self.tr("Удалить"))
+        self.btn_attach_provider = QPushButton(self.tr("Привязать к услуге"))
 
         for btn in (self.btn_add_provider, self.btn_edit_provider, self.btn_delete_provider, self.btn_attach_provider):
             btn.setStyleSheet("""
@@ -2517,7 +2542,7 @@ class SettingsWindow(QDialog):
             self.providers_table.setItem(i, 1, QTableWidgetItem(provider.get('name', '')))
             self.providers_table.setItem(i, 2, QTableWidgetItem(provider.get('inn', '')))
             self.providers_table.setItem(i, 3, QTableWidgetItem(provider.get('bank', '')))
-            attached = service_by_provider.get(provider['id'], 'Не привязана')
+            attached = service_by_provider.get(provider['id'], self.tr('Не привязана'))
             self.providers_table.setItem(i, 4, QTableWidgetItem(attached))
 
         self.providers_table.resizeColumnsToContents()
@@ -2534,14 +2559,14 @@ class SettingsWindow(QDialog):
         """Редактировать – берёт выбранную строку, загружает данные провайдера и открывает EditProviderDialog с provider_data"""
         selected = self.providers_table.selectedItems()
         if not selected:
-            QMessageBox.warning(self, "Ошибка", "Выберите организацию")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Выберите организацию"))
             return
         row = selected[0].row()
         provider_id = int(self.providers_table.item(row, 0).text())
         from database import get_provider
         provider = get_provider(provider_id)
         if not provider:
-            QMessageBox.warning(self, "Ошибка", "Данные не найдены")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Данные не найдены"))
             return
         dialog = EditProviderDialog(None, provider, self)  # service_key=None, provider_data=provider
         if dialog.exec():
@@ -2553,11 +2578,11 @@ class SettingsWindow(QDialog):
         """Удалить – подтверждение и удаление провайдера"""
         selected = self.providers_table.selectedItems()
         if not selected:
-            QMessageBox.warning(self, "Ошибка", "Выберите организацию")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Выберите организацию"))
             return
         row = selected[0].row()
         provider_id = int(self.providers_table.item(row, 0).text())
-        confirm = QMessageBox.question(self, "Удаление", "Удалить организацию?", QMessageBox.Yes | QMessageBox.No)
+        confirm = QMessageBox.question(self, self.tr("Удаление"), self.tr("Удалить организацию?"), QMessageBox.Yes | QMessageBox.No)
         if confirm == QMessageBox.Yes:
             from database import delete_provider
             delete_provider(provider_id)
@@ -2569,7 +2594,7 @@ class SettingsWindow(QDialog):
         """Привязать к услуге – выбор услуги из списка и привязка к ней провайдера"""
         selected = self.providers_table.selectedItems()
         if not selected:
-            QMessageBox.warning(self, "Ошибка", "Выберите организацию")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Выберите организацию"))
             return
         row = selected[0].row()
         provider_id = int(self.providers_table.item(row, 0).text())
@@ -2578,14 +2603,14 @@ class SettingsWindow(QDialog):
         # Список услуг без привязки
         available = [key for key, s in services.items() if s.get('enabled', True) and not s.get('provider_id')]
         if not available:
-            QMessageBox.information(self, "Информация", "Нет свободных услуг для привязки")
+            QMessageBox.information(self, self.tr("Информация"), self.tr("Нет свободных услуг для привязки"))
             return
 
         # Диалог выбора
         dialog = QDialog(self)
-        dialog.setWindowTitle("Привязка к услуге")
+        dialog.setWindowTitle(self.tr("Привязка к услуге"))
         layout = QVBoxLayout(dialog)
-        layout.addWidget(QLabel("Выберите услугу:"))
+        layout.addWidget(QLabel(self.tr("Выберите услугу:")))
         combo = QComboBox()
         for key in available:
             combo.addItem(services[key]['name'], key)
@@ -2611,7 +2636,7 @@ class SettingsWindow(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = btn_box.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(btn_box)
 
         if dialog.exec():
@@ -2621,6 +2646,163 @@ class SettingsWindow(QDialog):
             self.refresh_providers_table()
             if self.refresh_callback:
                 self.refresh_callback()
+
+    # ---------- Вкладка "История" ----------
+
+    @staticmethod
+    def _display_date(iso_date):
+        """Преобразует ISO-дату (YYYY-MM-DD) в DD.MM.YYYY."""
+        if not iso_date:
+            return "-"
+        parts = str(iso_date).split('-')
+        if len(parts) == 3:
+            return f"{parts[2]}.{parts[1]}.{parts[0]}"
+        return str(iso_date)
+
+    @staticmethod
+    def _display_number(value):
+        if value is None or value == '':
+            return "-"
+        try:
+            f = float(value)
+            if f.is_integer():
+                return str(int(f))
+            return str(f)
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _event_label(self, event):
+        event_type = event.get('event_type')
+        meter_state = event.get('meter_state')
+        if event_type == 'replacement':
+            return self.tr("Замена счётчика")
+        if event_type == 'verification_start':
+            return self.tr("Ремонт начат") if meter_state == 'on_repair' else self.tr("Поверка начата")
+        if event_type == 'verification_end':
+            return self.tr("Ремонт завершён") if meter_state == 'on_repair' else self.tr("Поверка завершена")
+        if event_type == 'removal':
+            return self.tr("Демонтаж")
+        if event_type == 'installation':
+            return self.tr("Установка нового счётчика")
+        return "—"
+
+    def setup_history_tab(self):
+        layout = QVBoxLayout(self.history_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(9)
+        self.history_table.setHorizontalHeaderLabels([
+            "ID", self.tr("Услуга"), self.tr("Дата"), self.tr("Событие"),
+            self.tr("Начало"), self.tr("Конец"), self.tr("Сумма норматива"), self.tr("Оплачено"), self.tr("Комментарий"),
+        ])
+        self.history_table.hideColumn(0)
+        self.history_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.history_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.history_table)
+
+        btn_layout = QHBoxLayout()
+        self.btn_add_history = QPushButton(self.tr("Добавить"))
+        self.btn_edit_history = QPushButton(self.tr("Редактировать"))
+        self.btn_delete_history = QPushButton(self.tr("Удалить"))
+        for btn in (self.btn_add_history, self.btn_edit_history, self.btn_delete_history):
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #e0e0e0;
+                    border: 1px solid #aaa;
+                    border-radius: 4px;
+                    padding: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #c0c0c0;
+                }
+                QPushButton:pressed {
+                    background-color: #a0a0a0;
+                }
+            """)
+        btn_layout.addWidget(self.btn_add_history)
+        btn_layout.addWidget(self.btn_edit_history)
+        btn_layout.addWidget(self.btn_delete_history)
+        layout.addLayout(btn_layout)
+
+        self.btn_add_history.clicked.connect(self.add_history_event)
+        self.btn_edit_history.clicked.connect(self.edit_history_event)
+        self.btn_delete_history.clicked.connect(self.delete_history_event)
+
+        self.refresh_history_table()
+
+    def refresh_history_table(self):
+        from database import load_all_meter_events
+
+        events = load_all_meter_events()
+        self.history_table.setRowCount(len(events))
+        for row, event in enumerate(events):
+            id_item = QTableWidgetItem(str(event.get('id')))
+            id_item.setData(Qt.UserRole, event.get('service_key'))
+            self.history_table.setItem(row, 0, id_item)
+            self.history_table.setItem(row, 1, QTableWidgetItem(event.get('service_name') or ''))
+            self.history_table.setItem(row, 2, QTableWidgetItem(self._display_date(event.get('date'))))
+            self.history_table.setItem(row, 3, QTableWidgetItem(self._event_label(event)))
+            self.history_table.setItem(row, 4, QTableWidgetItem(self._display_number(event.get('old_final'))))
+            self.history_table.setItem(row, 5, QTableWidgetItem(self._display_number(event.get('new_start'))))
+            self.history_table.setItem(row, 6, QTableWidgetItem(self._display_number(event.get('amount_norm'))))
+            self.history_table.setItem(row, 7, QTableWidgetItem(self.tr("Да") if event.get('is_paid') else self.tr("Нет")))
+            self.history_table.setItem(row, 8, QTableWidgetItem(event.get('comment') or "-"))
+
+        self.history_table.resizeColumnsToContents()
+        self.history_table.horizontalHeader().setStretchLastSection(False)
+        self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
+    def _after_history_change(self):
+        """Перезагружает услуги, обновляет таблицу и главное окно."""
+        from file_manager import load_settings
+        load_settings()
+        self.services = config.services
+        self.refresh_history_table()
+        parent = self.parent()
+        if parent is not None:
+            if hasattr(parent, 'dashboard'):
+                parent.dashboard.update_data()
+            if hasattr(parent, 'input_panel'):
+                parent.input_panel.rebuild_services_ui()
+
+    def add_history_event(self):
+        dialog = EventEditDialog(None, self)
+        if dialog.exec() == QDialog.Accepted:
+            self._after_history_change()
+
+    def edit_history_event(self):
+        selected = self.history_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Выберите событие"))
+            return
+        row = selected[0].row()
+        event_id = int(self.history_table.item(row, 0).text())
+        dialog = EventEditDialog(event_id, self)
+        if dialog.exec() == QDialog.Accepted:
+            self._after_history_change()
+
+    def delete_history_event(self):
+        selected = self.history_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Выберите событие"))
+            return
+        row = selected[0].row()
+        id_item = self.history_table.item(row, 0)
+        event_id = int(id_item.text())
+        service_key = id_item.data(Qt.UserRole)
+        confirm = QMessageBox.question(
+            self, self.tr("Удаление события"),
+            self.tr("Удалить выбранное событие?"),
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+        from database import delete_meter_event, recalculate_service_meter_state
+        delete_meter_event(event_id)
+        recalculate_service_meter_state(service_key)
+        self._after_history_change()
 
     def add_service(self):
         dialog = AddServiceDialog(self.services, self)
@@ -2657,13 +2839,14 @@ class SettingsWindow(QDialog):
         if not key:
             return
         confirm = QMessageBox.question(
-            self, "Удаление услуги",
-            f"Удалить услугу '{self.services[key].get('name', key)}'?",
+            self, self.tr("Удаление услуги"),
+            self.tr("Удалить услугу '{name}'?").format(name=self.services[key].get('name', key)),
             QMessageBox.Yes | QMessageBox.No
         )
         if confirm == QMessageBox.Yes:
+            from database import delete_service
+            delete_service(key)
             del self.services[key]
-            save_services()  # сохраняем в файл
             self.update_services_table()
             self.update_tariffs_table()
             self.update_commissions_table()
@@ -2685,6 +2868,45 @@ class SettingsWindow(QDialog):
         if self.refresh_callback:
             self.refresh_callback()
 
+    def setup_language_tab(self):
+        """Создаёт интерфейс вкладки выбора языка."""
+        layout = QVBoxLayout(self.language_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        self.language_combo = QComboBox()
+        self.language_combo.addItem(self.tr("Системный (по умолчанию)"), 'system')
+        self.language_combo.addItem(self.tr("Русский"), 'ru')
+        self.language_combo.addItem(self.tr("English"), 'en')
+        layout.addWidget(self.language_combo)
+
+        current = getattr(config, 'language', 'system') or 'system'
+        idx = self.language_combo.findData(current)
+        if idx >= 0:
+            self.language_combo.setCurrentIndex(idx)
+
+        hint = QLabel(self.tr("Изменения вступят в силу после перезапуска программы."))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        self.restart_btn = QPushButton(self.tr("Перезапустить сейчас"))
+        self.restart_btn.clicked.connect(self.on_language_restart)
+        layout.addWidget(self.restart_btn)
+        layout.addStretch()
+
+    def on_language_restart(self):
+        """Сохраняет выбранный язык и сообщает о необходимости перезапуска."""
+        from file_manager import save_language
+        lang = self.language_combo.currentData()
+        if lang:
+            config.language = lang
+            save_language()
+        QMessageBox.information(
+            self,
+            self.tr("Информация"),
+            self.tr("Изменения вступят в силу после перезапуска. "
+                    "Пожалуйста, закройте и запустите программу заново.")
+        )
+
     def save_all(self):
         """Сохраняет изменения из всех вкладок."""
         # Сохраняем тарифы
@@ -2698,8 +2920,8 @@ class SettingsWindow(QDialog):
             except ValueError:
                 QMessageBox.warning(
                     self,
-                    "Ошибка",
-                    f"Некорректный тариф для услуги {self.services[key]['name']}",
+                    self.tr("Ошибка"),
+                    self.tr("Некорректный тариф для услуги {name}").format(name=self.services[key]['name']),
                 )
                 return
         save_tariffs(new_tariffs)
@@ -2718,8 +2940,8 @@ class SettingsWindow(QDialog):
             except ValueError:
                 QMessageBox.warning(
                     self,
-                    "Ошибка",
-                    f"Комиссия должна быть числом от 0 до 100 для услуги {self.services[key]['name']}",
+                    self.tr("Ошибка"),
+                    self.tr("Комиссия должна быть числом от 0 до 100 для услуги {name}").format(name=self.services[key]['name']),
                 )
                 return
         save_fees(new_fees)
@@ -2728,27 +2950,524 @@ class SettingsWindow(QDialog):
 
         self.accept()  # закрываем диалог
 
+class EventEditDialog(QDialog):
+    """Диалог добавления/редактирования события счётчика в Истории."""
+
+    def __init__(self, event_id=None, parent=None):
+        super().__init__(parent)
+        self.event_id = event_id
+        self.setWindowTitle(self.tr("Добавить событие") if event_id is None else self.tr("Редактировать событие"))
+        self.setMinimumWidth(430)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Услуга
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Услуга:")))
+        self.service_combo = QComboBox()
+        from config import services
+        from services import MeteredService
+        for key, service in services.items():
+            if isinstance(service, MeteredService):
+                self.service_combo.addItem(service.get('name', key), key)
+        row.addWidget(self.service_combo)
+        layout.addLayout(row)
+
+        # Тип события
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Тип события:")))
+        self.type_combo = QComboBox()
+        self.type_combo.addItem(self.tr("Замена счётчика"), 'replacement')
+        self.type_combo.addItem(self.tr("Поверка"), 'verification')
+        self.type_combo.addItem(self.tr("Ремонт"), 'repair')
+        self.type_combo.addItem(self.tr("Демонтаж навсегда"), 'removal')
+        self.type_combo.addItem(self.tr("Установка нового счётчика"), 'installation')
+        row.addWidget(self.type_combo)
+        layout.addLayout(row)
+
+        # Дата события
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Дата события:")))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_edit.setDate(QDate.currentDate())
+        row.addWidget(self.date_edit)
+        layout.addLayout(row)
+
+        # Показания до
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Показания до:")))
+        self.old_edit = ClickToSelectLineEdit()
+        row.addWidget(self.old_edit)
+        layout.addLayout(row)
+
+        # Показания после
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Показания после:")))
+        self.new_edit = ClickToSelectLineEdit()
+        row.addWidget(self.new_edit)
+        layout.addLayout(row)
+
+        # Дата завершения (опционально)
+        self.completed_check = QCheckBox(self.tr("Событие завершено (указать дату завершения)"))
+        layout.addWidget(self.completed_check)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Дата завершения:")))
+        self.date_end_edit = QDateEdit()
+        self.date_end_edit.setCalendarPopup(True)
+        self.date_end_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_end_edit.setDate(QDate.currentDate())
+        self.date_end_edit.setEnabled(False)
+        row.addWidget(self.date_end_edit)
+        layout.addLayout(row)
+        self.completed_check.toggled.connect(lambda checked: self.date_end_edit.setEnabled(checked))
+
+        # Сумма по нормативу
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Сумма по нормативу (руб.):")))
+        self.amount_norm_edit = ClickToSelectLineEdit()
+        row.addWidget(self.amount_norm_edit)
+        layout.addLayout(row)
+
+        # Оплачено
+        self.paid_check = QCheckBox(self.tr("Оплачено"))
+        layout.addWidget(self.paid_check)
+
+        # Комментарий
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Комментарий:")))
+        self.comment_edit = QLineEdit()
+        row.addWidget(self.comment_edit)
+        layout.addLayout(row)
+
+        # Кнопки
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        button_box.setStyleSheet("""
+            QPushButton {
+                background-color: #e0e0e0;
+                border: 1px solid #aaa;
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QPushButton:hover {
+                background-color: #c0c0c0;
+            }
+            QPushButton:pressed {
+                background-color: #a0a0a0;
+            }
+        """)
+        cancel_btn = button_box.button(QDialogButtonBox.Cancel)
+        if cancel_btn:
+            cancel_btn.setText(self.tr("Отмена"))
+        layout.addWidget(button_box)
+
+        if event_id is not None:
+            self._load_event(event_id)
+
+    def _load_event(self, event_id):
+        from database import load_all_meter_events
+
+        event = next((e for e in load_all_meter_events() if e['id'] == event_id), None)
+        if event is None:
+            return
+
+        service_key = event.get('service_key')
+        idx = self.service_combo.findData(service_key)
+        if idx >= 0:
+            self.service_combo.setCurrentIndex(idx)
+        self.service_combo.setEnabled(False)
+
+        event_type = event.get('event_type')
+        meter_state = event.get('meter_state')
+        if event_type == 'replacement':
+            kind = 'replacement'
+        elif event_type == 'removal':
+            kind = 'removal'
+        elif event_type == 'installation':
+            kind = 'installation'
+        elif meter_state == 'on_repair':
+            kind = 'repair'
+        else:
+            kind = 'verification'
+        idx = self.type_combo.findData(kind)
+        if idx >= 0:
+            self.type_combo.setCurrentIndex(idx)
+
+        if event.get('date'):
+            d = QDate.fromString(event['date'], "yyyy-MM-dd")
+            if d.isValid():
+                self.date_edit.setDate(d)
+
+        self.completed_check.setChecked(bool(event.get('date_end')))
+        if event.get('date_end'):
+            d = QDate.fromString(event['date_end'], "yyyy-MM-dd")
+            if d.isValid():
+                self.date_end_edit.setDate(d)
+
+        if event.get('old_final') is not None:
+            self.old_edit.setText(str(event['old_final']))
+        if event.get('new_start') is not None:
+            self.new_edit.setText(str(event['new_start']))
+        if event.get('amount_norm') is not None:
+            self.amount_norm_edit.setText(str(event['amount_norm']))
+        self.paid_check.setChecked(bool(event.get('is_paid')))
+        comment = event.get('comment')
+        self.comment_edit.setText(comment if comment else '')
+
+    @staticmethod
+    def _to_float(value):
+        s = (value or '').strip()
+        if s == '':
+            return None
+        try:
+            return float(s.replace(',', '.'))
+        except ValueError:
+            return None
+
+    def accept(self):
+        from database import add_meter_event, update_meter_event, recalculate_service_meter_state
+
+        service_key = self.service_combo.currentData()
+        if not service_key:
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Выберите услугу"))
+            return
+
+        kind = self.type_combo.currentData()
+        date_val = self.date_edit.date().toString("yyyy-MM-dd")
+        date_end = self.date_end_edit.date().toString("yyyy-MM-dd") if self.completed_check.isChecked() else None
+
+        if kind == 'replacement':
+            event_type = 'replacement'
+            meter_state = 'active'
+        elif kind == 'removal':
+            event_type = 'removal'
+            meter_state = 'removed'
+        elif kind == 'installation':
+            event_type = 'installation'
+            meter_state = 'active'
+        elif kind == 'repair':
+            if date_end:
+                event_type = 'verification_end'
+                meter_state = 'active'
+            else:
+                event_type = 'verification_start'
+                meter_state = 'on_repair'
+        else:  # verification
+            if date_end:
+                event_type = 'verification_end'
+                meter_state = 'active'
+            else:
+                event_type = 'verification_start'
+                meter_state = 'on_verification'
+
+        old_final = self._to_float(self.old_edit.text())
+        new_start = self._to_float(self.new_edit.text())
+        amount_norm = self._to_float(self.amount_norm_edit.text())
+
+        # Валидация
+        if kind == 'replacement':
+            if old_final is None or new_start is None:
+                QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Для замены укажите показания до и после"))
+                return
+        if kind in ('verification', 'repair') and date_end and new_start is None:
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Укажите показания после"))
+            return
+
+        if kind in ('verification', 'repair'):
+            date_column = None
+            date_start = date_val
+        else:
+            date_column = date_val
+            date_start = None
+
+        comment = self.comment_edit.text().strip()
+        if not comment:
+            comment = None
+
+        event_data = {
+            'service_key': service_key,
+            'event_type': event_type,
+            'meter_state': meter_state,
+            'date': date_column,
+            'date_start': date_start,
+            'date_end': date_end,
+            'old_final': old_final,
+            'new_start': new_start,
+            'amount_norm': amount_norm,
+            'is_paid': 1 if self.paid_check.isChecked() else 0,
+            'comment': comment,
+        }
+
+        if self.event_id is not None:
+            update_meter_event(self.event_id, event_data)
+        else:
+            add_meter_event(event_data)
+
+        recalculate_service_meter_state(service_key)
+        super().accept()
+
+
+class RemoveMeterDialog(QDialog):
+    """Диалог снятия счётчика (демонтаж навсегда)."""
+
+    def __init__(self, service_key, parent=None):
+        super().__init__(parent)
+        self.service_key = service_key
+        from config import services
+        self.service = services.get(service_key)
+        self.setWindowTitle(self.tr("Снять счётчик"))
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Услуга (read-only)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Услуга:")))
+        name = self.service.get('name', service_key) if self.service else service_key
+        row.addWidget(QLabel(name))
+        layout.addLayout(row)
+
+        # Дата снятия
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Дата снятия:")))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_edit.setDate(QDate.currentDate())
+        row.addWidget(self.date_edit)
+        layout.addLayout(row)
+
+        # Показания на момент снятия
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Показания на момент снятия:")))
+        self.reading_edit = QLineEdit()
+        row.addWidget(self.reading_edit)
+        layout.addLayout(row)
+
+        # Комментарий
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Комментарий:")))
+        self.comment_edit = QLineEdit()
+        row.addWidget(self.comment_edit)
+        layout.addLayout(row)
+
+        # Кнопки
+        button_box = QDialogButtonBox()
+        remove_btn = button_box.addButton(self.tr("Снять"), QDialogButtonBox.AcceptRole)
+        cancel_btn = button_box.addButton(self.tr("Отмена"), QDialogButtonBox.RejectRole)
+        remove_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        button_box.setStyleSheet("""
+                                    QPushButton {
+                                        background-color: #e0e0e0;
+                                        border: 1px solid #aaa;
+                                        border-radius: 4px;
+                                        padding: 6px;
+                                    }
+                                    QPushButton:hover {
+                                        background-color: #c0c0c0;
+                                    }
+                                    QPushButton:pressed {
+                                        background-color: #a0a0a0;
+                                    }
+                                """)
+        layout.addWidget(button_box)
+
+    @staticmethod
+    def _to_float(value):
+        s = (value or '').strip()
+        if s == '':
+            return None
+        try:
+            return float(s.replace(',', '.'))
+        except ValueError:
+            return None
+
+    def accept(self):
+        from database import add_meter_event, recalculate_service_meter_state
+        from config import services
+        from file_manager import save_settings
+
+        reading = self._to_float(self.reading_edit.text())
+        old_final = reading if reading is not None else 0.0
+        date_iso = self.date_edit.date().toString("yyyy-MM-dd")
+        comment = self.comment_edit.text().strip()
+        if not comment:
+            comment = None
+
+        add_meter_event({
+            'service_key': self.service_key,
+            'event_type': 'removal',
+            'meter_state': 'removed',
+            'date': date_iso,
+            'date_start': None,
+            'date_end': None,
+            'old_final': old_final,
+            'new_start': None,
+            'amount_norm': None,
+            'is_paid': 0,
+            'comment': comment,
+        })
+
+        service = services.get(self.service_key)
+        if service is not None:
+            service.meter_state = 'removed'
+
+        save_settings()
+        recalculate_service_meter_state(self.service_key)
+        super().accept()
+
+
+class InstallMeterDialog(QDialog):
+    """Диалог установки нового счётчика."""
+
+    def __init__(self, service_key, parent=None):
+        super().__init__(parent)
+        self.service_key = service_key
+        from config import services
+        self.service = services.get(service_key)
+        self.setWindowTitle(self.tr("Установить новый счётчик"))
+        self.setMinimumWidth(400)
+        self.setStyleSheet("background-color: white;")
+        layout = QVBoxLayout(self)
+
+        # Услуга (read-only)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Услуга:")))
+        name = self.service.get('name', service_key) if self.service else service_key
+        row.addWidget(QLabel(name))
+        layout.addLayout(row)
+
+        # Дата установки
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Дата установки:")))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd.MM.yyyy")
+        self.date_edit.setDate(QDate.currentDate())
+        row.addWidget(self.date_edit)
+        layout.addLayout(row)
+
+        # Начальные показания нового счётчика
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Начальные показания:")))
+        self.start_edit = QLineEdit("0")
+        row.addWidget(self.start_edit)
+        layout.addLayout(row)
+
+        # Тариф (предзаполнен текущим)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Тариф:")))
+        current_tariff = self.service.get('tariff', 0.0) if self.service else 0.0
+        self.tariff_edit = QLineEdit(str(current_tariff))
+        row.addWidget(self.tariff_edit)
+        layout.addLayout(row)
+
+        # Комментарий
+        row = QHBoxLayout()
+        row.addWidget(QLabel(self.tr("Комментарий:")))
+        self.comment_edit = QLineEdit()
+        row.addWidget(self.comment_edit)
+        layout.addLayout(row)
+
+        # Кнопки
+        button_box = QDialogButtonBox()
+        install_btn = button_box.addButton(self.tr("Установить"), QDialogButtonBox.AcceptRole)
+        cancel_btn = button_box.addButton(self.tr("Отмена"), QDialogButtonBox.RejectRole)
+        install_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        button_box.setStyleSheet("""
+                                QPushButton {
+                                    background-color: #e0e0e0;
+                                    border: 1px solid #aaa;
+                                    border-radius: 4px;
+                                    padding: 6px;
+                                }
+                                QPushButton:hover {
+                                    background-color: #c0c0c0;
+                                }
+                                QPushButton:pressed {
+                                    background-color: #a0a0a0;
+                                }
+                            """)
+        layout.addWidget(button_box)
+
+    @staticmethod
+    def _to_float(value):
+        s = (value or '').strip()
+        if s == '':
+            return None
+        try:
+            return float(s.replace(',', '.'))
+        except ValueError:
+            return None
+
+    def accept(self):
+        from database import add_meter_event, recalculate_service_meter_state
+        from config import services
+        from file_manager import save_settings
+
+        start_value = self._to_float(self.start_edit.text())
+        if start_value is None:
+            start_value = 0.0
+        tariff_value = self._to_float(self.tariff_edit.text())
+        if tariff_value is None:
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Некорректный тариф"))
+            return
+        date_iso = self.date_edit.date().toString("yyyy-MM-dd")
+        comment = self.comment_edit.text().strip()
+        if not comment:
+            comment = None
+
+        add_meter_event({
+            'service_key': self.service_key,
+            'event_type': 'installation',
+            'meter_state': 'active',
+            'date': date_iso,
+            'date_start': None,
+            'date_end': None,
+            'old_final': 0.0,
+            'new_start': start_value,
+            'amount_norm': None,
+            'is_paid': 0,
+            'comment': comment,
+        })
+
+        service = services.get(self.service_key)
+        if service is not None:
+            service.meter_state = 'active'
+            service.start_value = start_value
+            service.tariff = tariff_value
+
+        save_settings()
+        recalculate_service_meter_state(self.service_key)
+        super().accept()
+
+
 class ProviderInfoDialog(QDialog):
     def __init__(self, provider_data, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Реквизиты организации")
+        self.setWindowTitle(self.tr("Реквизиты организации"))
         self.setMinimumWidth(400)
         self.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(self)
 
         fields = [
-            ("Организация", provider_data.get('name', '')),
-            ("ИНН", provider_data.get('inn', '')),
-            ("КПП", provider_data.get('kpp', '')),
-            ("Расчётный счёт", provider_data.get('account', '')),
-            ("Банк", provider_data.get('bank', '')),
-            ("БИК", provider_data.get('bik', '')),
-            ("Корреспондентский счёт", provider_data.get('corr_account', '')),
-            ("Лицевой счёт", provider_data.get('personal_account', '')),
-            ("Назначение платежа", provider_data.get('payment_purpose', '')),
-            ("Идентификатор платежа", provider_data.get('payment_identifier', '')),
-            ("Адрес", provider_data.get('address', '')),
-            ("Дополнительная информация", provider_data.get('extra_info', ''))
+            (self.tr("Организация"), provider_data.get('name', '')),
+            (self.tr("ИНН"), provider_data.get('inn', '')),
+            (self.tr("КПП"), provider_data.get('kpp', '')),
+            (self.tr("Расчётный счёт"), provider_data.get('account', '')),
+            (self.tr("Банк"), provider_data.get('bank', '')),
+            (self.tr("БИК"), provider_data.get('bik', '')),
+            (self.tr("Корреспондентский счёт"), provider_data.get('corr_account', '')),
+            (self.tr("Лицевой счёт"), provider_data.get('personal_account', '')),
+            (self.tr("Назначение платежа"), provider_data.get('payment_purpose', '')),
+            (self.tr("Идентификатор платежа"), provider_data.get('payment_identifier', '')),
+            (self.tr("Адрес"), provider_data.get('address', '')),
+            (self.tr("Дополнительная информация"), provider_data.get('extra_info', ''))
         ]
         for label, value in fields:
             row = QHBoxLayout()
@@ -2768,7 +3487,7 @@ class ProviderInfoDialog(QDialog):
             row.addWidget(edit)
             layout.addLayout(row)
 
-        close_btn = QPushButton("Закрыть")
+        close_btn = QPushButton(self.tr("Закрыть"))
         close_btn.setStyleSheet("""
                     QPushButton {
                         background-color: #e0e0e0;
@@ -2792,25 +3511,25 @@ class EditProviderDialog(QDialog):
         super().__init__(parent)
         self.service_key = service_key
         self.provider_data = provider_data or {}
-        self.setWindowTitle("Редактирование реквизитов" if provider_data else "Добавление реквизитов")
+        self.setWindowTitle(self.tr("Редактирование реквизитов") if provider_data else self.tr("Добавление реквизитов"))
         self.setMinimumWidth(400)
         self.setStyleSheet("background-color: white;")
 
         layout = QVBoxLayout(self)
 
         fields = [
-            ("Название организации", 'name'),
-            ("ИНН", 'inn'),
-            ("КПП", 'kpp'),
-            ("Расчётный счёт", 'account'),
-            ("Банк", 'bank'),
-            ("БИК", 'bik'),
-            ("Корреспондентский счёт", 'corr_account'),
-            ("Лицевой счёт", 'personal_account'),
-            ("Назначение платежа", 'payment_purpose'),
-            ("Идентификатор платежа", 'payment_identifier'),
-            ("Адрес", 'address'),
-            ("Дополнительная информация", 'extra_info')
+            (self.tr("Название организации"), 'name'),
+            (self.tr("ИНН"), 'inn'),
+            (self.tr("КПП"), 'kpp'),
+            (self.tr("Расчётный счёт"), 'account'),
+            (self.tr("Банк"), 'bank'),
+            (self.tr("БИК"), 'bik'),
+            (self.tr("Корреспондентский счёт"), 'corr_account'),
+            (self.tr("Лицевой счёт"), 'personal_account'),
+            (self.tr("Назначение платежа"), 'payment_purpose'),
+            (self.tr("Идентификатор платежа"), 'payment_identifier'),
+            (self.tr("Адрес"), 'address'),
+            (self.tr("Дополнительная информация"), 'extra_info')
 
         ]
         self.inputs = {}
@@ -2843,11 +3562,11 @@ class EditProviderDialog(QDialog):
         # --- Меняем названия кнопок ---
         ok_btn = button_box.button(QDialogButtonBox.Ok)
         if ok_btn:
-            ok_btn.setText("Сохранить")
+            ok_btn.setText(self.tr("Сохранить"))
 
         cancel_btn = button_box.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(button_box)
 
     def get_data(self):
@@ -2862,7 +3581,7 @@ class EditProviderDialog(QDialog):
         from database import save_provider, set_service_provider
         data = self.get_data()
         if not data.get('name'):
-            QMessageBox.warning(self, "Ошибка", "Название организации обязательно")
+            QMessageBox.warning(self, self.tr("Ошибка"), self.tr("Название организации обязательно"))
             return  # <-- если здесь return, диалог не закрывается
         provider_id = save_provider(data)
         if self.service_key:
@@ -2873,30 +3592,30 @@ class PaymentConfirmationDialog(QDialog):
     def __init__(self, items, service_name, parent=None):
         from decimal import Decimal
         """
-        items: список кортежей (описание, сумма) например [("Расход до снятия", 150.0), ("Сумма по нормативу", 200.0)]
+        items: список кортежей (описание, сумма) например [(self.tr("Расход до снятия"), 150.0), (self.tr("Сумма по нормативу"), 200.0)]
         service_name: название услуги (для отображения в заголовке)
         """
         super().__init__(parent)
-        self.setWindowTitle("Подтверждение оплаты")
+        self.setWindowTitle(self.tr("Подтверждение оплаты"))
         self.setMinimumWidth(450)
         self.setStyleSheet("background-color: white;")
         layout = QVBoxLayout(self)
 
         # Заголовок
-        layout.addWidget(QLabel(f"<b>Оплата за услугу: {service_name}</b>"))
-        layout.addWidget(QLabel("Будут оплачены:"))
+        layout.addWidget(QLabel(self.tr("<b>Оплата за услугу: {name}</b>").format(name=service_name)))
+        layout.addWidget(QLabel(self.tr("Будут оплачены:")))
 
         # Список позиций
         total = Decimal('0')
         for desc, amount in items:
-            layout.addWidget(QLabel(f"  • {desc}: {amount:.2f} руб."))
+            layout.addWidget(QLabel(self.tr("  • {desc}: {amount} руб.").format(desc=desc, amount=f"{amount:.2f}")))
             total += Decimal(str(amount))
 
         # Итоговая сумма
-        layout.addWidget(QLabel(f"<b>Итого без комиссии: {total:.2f} руб.</b>"))
+        layout.addWidget(QLabel(self.tr("<b>Итого без комиссии: {total} руб.</b>").format(total=f"{total:.2f}")))
 
         # Чекбокс комиссии
-        self.fee_check = QCheckBox("Мой банк берёт комиссию")
+        self.fee_check = QCheckBox(self.tr("Мой банк берёт комиссию"))
         layout.addWidget(self.fee_check)
 
         # Кнопки
@@ -2920,7 +3639,7 @@ class PaymentConfirmationDialog(QDialog):
         #Меняем название кнопки Cancel
         cancel_btn = button_box.button(QDialogButtonBox.Cancel)
         if cancel_btn:
-            cancel_btn.setText("Отмена")
+            cancel_btn.setText(self.tr("Отмена"))
         layout.addWidget(button_box)
 
         self.total = total
@@ -2934,6 +3653,8 @@ class PaymentConfirmationDialog(QDialog):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+
+    install_translators(app)
 
     # Устанавливаем иконку приложения (глобально)
     from PySide6.QtGui import QIcon
@@ -2957,6 +3678,32 @@ if __name__ == "__main__":
         QPushButton:pressed {
             background-color: #a0a0a0;
         }
+        QCalendarWidget QWidget {
+            color: black;
+            background-color: white;
+        }
+        QCalendarWidget QToolButton {
+            color: black;
+            background-color: white;
+            padding: 4px;
+        }
+        QCalendarWidget QToolButton:hover {
+            background-color: #e0e0e0;
+        }
+        QCalendarWidget QMenu {
+            color: black;
+            background-color: white;
+        }
+        QCalendarWidget QSpinBox {
+            color: black;
+            background-color: white;
+        }
+        QCalendarWidget QAbstractItemView:enabled {
+            color: black;
+            background-color: white;
+            selection-background-color: #4a90d9;
+            selection-color: white;
+        }
     """)
 
     # Инициализация базы данных (создаст файл communal.db)
@@ -2973,6 +3720,7 @@ if __name__ == "__main__":
         wizard = FirstRunWizard()
         if wizard.exec() != QDialog.Accepted:
             sys.exit(0)
+        load_settings() # ← перезагружаем config.services из БД как объекты
         # после мастера услуги добавлены
 
     # Запускаем главное окно

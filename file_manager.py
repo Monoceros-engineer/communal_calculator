@@ -1,7 +1,7 @@
 import os
 import json
 import config
-from database import load_services, save_service, delete_service, get_service_id_by_key, add_replacement, mark_replacements_paid, clear_paid_replacements
+from database import load_services, save_service, delete_service, get_service_id_by_key, add_replacement, mark_replacements_paid, clear_paid_replacements, get_setting, set_setting
 
 
 CONFIG_FILE = "calculator_config.json"  # пока оставим, но не будем использовать
@@ -23,6 +23,7 @@ def get_old_config_path():
 def load_settings():
     """Загружает услуги из SQLite или мигрирует из JSON, если БД пуста."""
     services = load_services()
+    config.language = get_setting('language', 'system') or 'system'
     if services:
         config.services = services
         return True  # загружено, не первый запуск
@@ -56,3 +57,8 @@ def save_settings():
     """Сохраняет текущие услуги из config.services в SQLite."""
     for key, service in config.services.items():
         save_service(key, service)
+    save_language()
+
+def save_language():
+    """Сохраняет выбранный язык интерфейса в SQLite."""
+    set_setting('language', config.language)

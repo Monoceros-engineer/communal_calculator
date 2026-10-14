@@ -1,9 +1,251 @@
 import sqlite3
 import json
 from paths import get_db_path   # импортируем из paths
+from services import BaseService, MeteredService, FixedService
 
 # Путь к базе данных – используем функцию из paths
 DB_PATH = get_db_path()
+
+def migrate_fee_nullable():
+    """Миграция: делает колонку services.fee NULL-допустимой.
+
+    Для старых БД (fee REAL NOT NULL DEFAULT 0) пересоздаёт таблицу services
+    без NOT NULL, сохраняя все строки (id включительно). Проверка через
+    PRAGMA table_info делает пересоздание однократным и идемпотентным.
+    """
+    try:
+        # Проверяем, нужна ли миграция
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(services)")
+            fee_row = next((row for row in cursor.fetchall() if row[1] == 'fee'), None)
+        if fee_row is None or fee_row[3] == 0:  # таблицы нет или уже nullable
+            return
+
+        # Пересоздаём таблицу services с fee REAL (без NOT NULL)
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            cursor.execute("BEGIN")
+            cursor.execute("""
+                CREATE TABLE services_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    key TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL CHECK(type IN ('metered', 'fixed')),
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    tariff REAL NOT NULL,
+                    fee REAL,
+                    start_value REAL,
+                    provider_id INTEGER,
+                    FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO services_new (id, key, name, type, enabled, tariff, fee, start_value, provider_id)
+                SELECT id, key, name, type, enabled, tariff, fee, start_value, provider_id
+                FROM services
+            """)
+            cursor.execute("DROP TABLE services")
+            cursor.execute("ALTER TABLE services_new RENAME TO services")
+            conn.commit()
+            cursor.execute("PRAGMA foreign_keys = ON")
+        print("Migration: services.fee is now nullable.")
+    except Exception as e:
+        print(f"Migration services.fee failed: {e}")
+        raise
+
+def migrate_new_start_nullable():
+    """Миграция: делает колонку meter_replacements.new_start NULL-допустимой.
+
+    Для старых БД (new_start REAL NOT NULL) пересоздаёт таблицу без NOT NULL,
+    сохраняя все строки (id включительно). Проверка через PRAGMA table_info
+    делает пересоздание однократным и идемпотентным.
+    """
+    # Известный состав колонок (сверен с текущей схемой и с реальной БД
+    # через PRAGMA table_info). Лишние колонки — ошибка, чтобы не потерять
+    # данные молча.
+    KNOWN_COLS = {
+        "id", "service_id", "old_final", "new_start", "date", "is_paid",
+        "date_start", "date_end", "amount_norm", "next_verification_date",
+        "is_active", "type", "is_consumption_paid", "is_norm_paid"}
+    try:
+        # Проверяем, нужна ли миграция, и сверяем состав колонок
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(meter_replacements)")
+            cols = cursor.fetchall()
+        new_start_row = next((row for row in cols if row[1] == 'new_start'), None)
+        if new_start_row is None or new_start_row[3] == 0:  # таблицы нет или уже nullable
+            return
+
+        extra = {row[1] for row in cols} - KNOWN_COLS
+        if extra:
+            raise RuntimeError(
+                f"meter_replacements has unknown columns: {sorted(extra)}")
+
+        # Пересоздаём таблицу meter_replacements с new_start REAL (без NOT NULL)
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = OFF")
+            cursor.execute("BEGIN")
+            cursor.execute("""
+                CREATE TABLE meter_replacements_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    service_id INTEGER NOT NULL,
+                    old_final REAL NOT NULL,
+                    new_start REAL,
+                    date TEXT,
+                    is_paid INTEGER NOT NULL DEFAULT 0,
+                    date_start TEXT,
+                    date_end TEXT,
+                    amount_norm REAL,
+                    next_verification_date TEXT,
+                    is_active INTEGER DEFAULT 0,
+                    type TEXT DEFAULT 'replacement',
+                    is_consumption_paid INTEGER DEFAULT 0,
+                    is_norm_paid INTEGER DEFAULT 0,
+                    FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO meter_replacements_new
+                    (id, service_id, old_final, new_start, date, is_paid,
+                     date_start, date_end, amount_norm, next_verification_date,
+                     is_active, type, is_consumption_paid, is_norm_paid)
+                SELECT
+                     id, service_id, old_final, new_start, date, is_paid,
+                     date_start, date_end, amount_norm, next_verification_date,
+                     is_active, type, is_consumption_paid, is_norm_paid
+                FROM meter_replacements
+            """)
+            cursor.execute("DROP TABLE meter_replacements")
+            cursor.execute("ALTER TABLE meter_replacements_new RENAME TO meter_replacements")
+            conn.commit()
+            cursor.execute("PRAGMA foreign_keys = ON")
+        print("Migration: meter_replacements.new_start is now nullable.")
+    except Exception as e:
+        print(f"Migration meter_replacements.new_start failed: {e}")
+        raise
+
+def migrate_zero_fee_to_null():
+    """Миграция: fee = 0.0 → NULL (0.0 семантически равен «комиссия не задана»).
+
+    Идемпотентна: если строк с fee = 0.0 нет, ничего не делает.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            count = cursor.execute(
+                "SELECT COUNT(*) FROM services WHERE fee = 0.0"
+            ).fetchone()[0]
+            if count > 0:
+                cursor.execute("UPDATE services SET fee = NULL WHERE fee = 0.0")
+                conn.commit()
+                print(f"Migration: {count} services with fee=0.0 converted to NULL.")
+    except Exception as e:
+        print(f"Migration fee=0.0 -> NULL failed: {e}")
+        raise
+
+def migrate_services_meter_state():
+    """Миграция: добавляет services.meter_state и заполняет по текущему состоянию.
+
+    metered + активная поверка → 'on_verification', иначе 'active';
+    fixed → NULL (поле не имеет смысла). Идемпотентна: если колонка уже
+    есть, ничего не делает.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(services)")
+            cols = [row[1] for row in cursor.fetchall()]
+            if 'meter_state' in cols:
+                return
+            cursor.execute("ALTER TABLE services ADD COLUMN meter_state TEXT DEFAULT 'active'")
+            # metered с активной поверкой → on_verification
+            cursor.execute("""
+                UPDATE services
+                SET meter_state = 'on_verification'
+                WHERE type = 'metered'
+                  AND EXISTS (
+                      SELECT 1 FROM meter_replacements
+                      WHERE meter_replacements.service_id = services.id
+                        AND meter_replacements.type = 'verification'
+                        AND meter_replacements.is_active = 1
+                  )
+            """)
+            # У fixed-услуг meter_state не имеет смысла
+            cursor.execute("UPDATE services SET meter_state = NULL WHERE type = 'fixed'")
+            conn.commit()
+        print("Migration: services.meter_state added and populated.")
+    except Exception as e:
+        print(f"Migration services.meter_state failed: {e}")
+        raise
+
+def migrate_meter_replacements_event_type():
+    """Миграция: добавляет meter_replacements.event_type/meter_state и заполняет старые строки.
+
+    type='replacement'                 → event_type='replacement',       meter_state='active'
+    type='verification' AND is_active=1 → event_type='verification_start', meter_state='on_verification'
+    type='verification' AND is_active=0 → event_type='verification_end',   meter_state='active'
+
+    Обновляет только строки с event_type IS NULL — идемпотентна.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(meter_replacements)")
+            cols = [row[1] for row in cursor.fetchall()]
+            missing = [c for c in ('event_type', 'meter_state') if c not in cols]
+            added = False
+            for col in missing:
+                cursor.execute(f"ALTER TABLE meter_replacements ADD COLUMN {col} TEXT")
+                added = True
+            count = cursor.execute(
+                "SELECT COUNT(*) FROM meter_replacements WHERE event_type IS NULL"
+            ).fetchone()[0]
+            if count > 0:
+                cursor.execute("""
+                    UPDATE meter_replacements
+                    SET event_type = CASE
+                            WHEN type = 'replacement' THEN 'replacement'
+                            WHEN type = 'verification' AND is_active = 1 THEN 'verification_start'
+                            WHEN type = 'verification' AND is_active = 0 THEN 'verification_end'
+                            ELSE NULL
+                        END,
+                        meter_state = CASE
+                            WHEN type = 'replacement' THEN 'active'
+                            WHEN type = 'verification' AND is_active = 1 THEN 'on_verification'
+                            WHEN type = 'verification' AND is_active = 0 THEN 'active'
+                            ELSE NULL
+                        END
+                    WHERE event_type IS NULL
+                """)
+                conn.commit()
+            if added or count > 0:
+                print("Migration: meter_replacements.event_type/meter_state populated.")
+    except Exception as e:
+        print(f"Migration meter_replacements.event_type/meter_state failed: {e}")
+        raise
+
+def migrate_meter_replacements_comment():
+    """Миграция: добавляет meter_replacements.comment (TEXT).
+
+    Идемпотентна: если колонка уже есть, ничего не делает.
+    """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(meter_replacements)")
+            cols = [row[1] for row in cursor.fetchall()]
+            if 'comment' in cols:
+                return
+            cursor.execute("ALTER TABLE meter_replacements ADD COLUMN comment TEXT")
+            conn.commit()
+        print("Migration: meter_replacements.comment added.")
+    except Exception as e:
+        print(f"Migration meter_replacements.comment failed: {e}")
+        raise
 
 def init_db():
     """Создаёт таблицы, если они не существуют."""
@@ -18,8 +260,9 @@ def init_db():
                 name TEXT NOT NULL,
                 type TEXT NOT NULL CHECK(type IN ('metered', 'fixed')),
                 enabled INTEGER NOT NULL DEFAULT 1,
+                meter_state TEXT DEFAULT 'active',
                 tariff REAL NOT NULL,
-                fee REAL NOT NULL DEFAULT 0,
+                fee REAL,
                 start_value REAL,
                 provider_id INTEGER,
                 FOREIGN KEY (provider_id) REFERENCES providers(id) ON DELETE SET NULL
@@ -41,6 +284,9 @@ def init_db():
                 next_verification_date TEXT,
                 is_active INTEGER DEFAULT 0,
                 type TEXT DEFAULT 'replacement',
+                event_type TEXT,
+                meter_state TEXT,
+                comment TEXT,
                 is_consumption_paid INTEGER DEFAULT 0,
                 is_norm_paid INTEGER DEFAULT 0,
                 FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
@@ -106,6 +352,15 @@ def init_db():
                 address TEXT
             )
         """)
+
+        # Таблица настроек (key-value)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
         # Добавляем новые колонки, если их ещё нет (для существующих БД)
         cursor.execute("PRAGMA table_info(meter_replacements)")
         existing_cols = [col[1] for col in cursor.fetchall()]
@@ -124,6 +379,34 @@ def init_db():
 
         # Для старых записей (замен) устанавливаем корректные значения
         cursor.execute("UPDATE meter_replacements SET type = 'replacement', is_active = 0 WHERE type IS NULL AND is_active IS NULL")
+        conn.commit()
+
+    # Миграции: services.fee и meter_replacements.new_start → NULL-допустимые
+    # колонки (после создания таблиц, до любых операций, читающих данные).
+    # Порядок важен: сначала fee, затем new_start.
+    migrate_fee_nullable()
+    migrate_new_start_nullable()
+    migrate_zero_fee_to_null()
+    migrate_services_meter_state()
+    migrate_meter_replacements_event_type()
+    migrate_meter_replacements_comment()
+
+def get_setting(key, default=None):
+    """Возвращает значение настройки из таблицы settings."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default
+
+def set_setting(key, value):
+    """Сохраняет (вставляет или обновляет) настройку в таблице settings."""
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+            (key, value)
+        )
         conn.commit()
 
 # ===== ФУНКЦИИ ДЛЯ СОХРАНЕНИЯ СЧЕТОВ =====
@@ -213,7 +496,7 @@ def migrate_from_json():
             """, (
                 key, service['name'], service['type'],
                 1 if service.get('enabled', True) else 0,
-                service['tariff'], service.get('fee', 0.0),
+                service['tariff'], service.get('fee'),
                 service.get('start_value')
             ))
         conn.commit()
@@ -242,6 +525,17 @@ def migrate_from_json():
 
 def save_service(key, service):
     """Сохраняет услугу в таблицу services (обновляет или вставляет)."""
+    # Комиссия 0.0 семантически равна «не задана»: храним NULL, чтобы UI
+    # отличал «без комиссии» от явно заданного процента.
+    fee = service.get('fee')
+    if fee is not None and fee == 0:
+        fee = None
+
+    # Для fixed-услуг meter_state не имеет смысла — всегда NULL.
+    meter_state = service.get('meter_state')
+    if service['type'] == 'fixed':
+        meter_state = None
+
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         # Проверяем, существует ли уже услуга с таким ключом
@@ -252,14 +546,15 @@ def save_service(key, service):
             service_id = row[0]
             cursor.execute("""
                 UPDATE services
-                SET name = ?, type = ?, enabled = ?, tariff = ?, fee = ?, start_value = ?, provider_id = ?
+                SET name = ?, type = ?, enabled = ?, meter_state = ?, tariff = ?, fee = ?, start_value = ?, provider_id = ?
                 WHERE id = ?
             """, (
                 service['name'],
                 service['type'],
                 1 if service.get('enabled', True) else 0,
+                meter_state,
                 service['tariff'],
-                service.get('fee', 0.0),
+                fee,
                 service.get('start_value'),
                 service.get('provider_id'),
                 service_id
@@ -267,15 +562,16 @@ def save_service(key, service):
         else:
             # Вставляем новую запись
             cursor.execute("""
-                INSERT INTO services (key, name, type, enabled, tariff, fee, start_value, provider_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO services (key, name, type, enabled, meter_state, tariff, fee, start_value, provider_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 key,
                 service['name'],
                 service['type'],
                 1 if service.get('enabled', True) else 0,
+                meter_state,
                 service['tariff'],
-                service.get('fee', 0.0),
+                fee,
                 service.get('start_value'),
                 service.get('provider_id')
             ))
@@ -296,25 +592,29 @@ def load_services():
         cursor = conn.cursor()
 
         # --- Загружаем услуги ---
-        cursor.execute("SELECT id, key, name, type, enabled, tariff, fee, start_value, provider_id FROM services")
+        cursor.execute("SELECT id, key, name, type, enabled, meter_state, tariff, fee, start_value, provider_id FROM services")
         rows = cursor.fetchall()
         for row in rows:
-            id_, key, name, type_, enabled, tariff, fee, start_value, provider_id = row
-            services[key] = {
+            id_, key, name, type_, enabled, meter_state, tariff, fee, start_value, provider_id = row
+            data = {
                 'id': id_,
                 'name': name,
                 'type': type_,
                 'enabled': bool(enabled),
+                'meter_state': meter_state,
                 'tariff': tariff,
                 'fee': fee,
                 'start_value': start_value,
                 'provider_id': provider_id,
-                'replacements': [],
-                'last_completed_verification': None   # ← добавляем поле
             }
+            services[key] = BaseService.from_dict(data, key=key)
 
         # --- Загружаем замены ---
-        cursor.execute("SELECT id, service_id, old_final, new_start, date, is_paid FROM meter_replacements")
+        cursor.execute("""
+                            SELECT id, service_id, old_final, new_start, date, is_paid 
+                            FROM meter_replacements
+                            WHERE type = 'replacement' OR type IS NULL
+                        """)
         replacements_rows = cursor.fetchall()
         cursor.execute("SELECT id, key FROM services")
         id_to_key = {row[0]: row[1] for row in cursor.fetchall()}
@@ -398,9 +698,17 @@ def add_replacement(service_id, old_final, new_start, date=None):
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO meter_replacements (service_id, old_final, new_start, date, is_paid, type, is_active)
-            VALUES (?, ?, ?, ?, 0, 'replacement', 0)
+            INSERT INTO meter_replacements (
+                service_id, old_final, new_start, date, is_paid, type,
+                event_type, meter_state, is_active
+            )
+            VALUES (?, ?, ?, ?, 0, 'replacement', 'replacement', 'active', 0)
         """, (service_id, old_final, new_start, date))
+        # После замены счётчик новый и активный.
+        cursor.execute(
+            "UPDATE services SET meter_state = 'active' WHERE id = ?",
+            (service_id,)
+        )
         conn.commit()
         return cursor.lastrowid
 
@@ -528,57 +836,91 @@ def set_service_provider(service_key, provider_id):
 
 # ===== ПОВЕРКИ (новая логика на основе meter_replacements) =====
 
-def add_verification(service_id, data):
+def add_verification(service_id, data, default_event_type=None):
     """
     Создаёт запись о поверке в таблице meter_replacements.
     data: dict с полями old_final, new_start, date_start, date_end,
           amount_norm, next_verification_date
+    default_event_type: 'on_repair' сохраняет meter_state='on_repair'
+          для незавершённого события (иначе 'on_verification').
     """
+    date_end = data.get('date_end')
+    event_type = 'verification_start' if not date_end else 'verification_end'
+    if date_end:
+        meter_state = 'active'
+    elif default_event_type == 'on_repair':
+        meter_state = 'on_repair'
+    else:
+        meter_state = 'on_verification'
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO meter_replacements (
                 service_id, old_final, new_start, date_start, date_end,
                 amount_norm, next_verification_date, is_active, type,
-                is_consumption_paid, is_norm_paid
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                event_type, meter_state, is_consumption_paid, is_norm_paid
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             service_id,
             data.get('old_final'),
             data.get('new_start'),
             data.get('date_start'),
-            data.get('date_end'),
+            date_end,
             data.get('amount_norm'),
             data.get('next_verification_date'),
-            1 if not data.get('date_end') else 0,
+            1 if not date_end else 0,
             'verification',
+            event_type,
+            meter_state,
             data.get('is_consumption_paid', 0),
             data.get('is_norm_paid', 0)
         ))
+        # Синхронизируем состояние счётчика услуги.
+        cursor.execute(
+            "UPDATE services SET meter_state = ? WHERE id = ?",
+            (meter_state, service_id)
+        )
         conn.commit()
         return cursor.lastrowid
 
-def update_verification(verification_id, data):
+def update_verification(verification_id, data, default_event_type=None):
+    date_end = data.get('date_end')
+    event_type = 'verification_start' if not date_end else 'verification_end'
+    if date_end:
+        meter_state = 'active'
+    elif default_event_type == 'on_repair':
+        meter_state = 'on_repair'
+    else:
+        meter_state = 'on_verification'
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE meter_replacements
             SET old_final = ?, new_start = ?, date_start = ?, date_end = ?,
                 amount_norm = ?, next_verification_date = ?, is_active = ?,
+                event_type = ?, meter_state = ?,
                 is_consumption_paid = ?, is_norm_paid = ?
             WHERE id = ?
         """, (
             data.get('old_final'),
             data.get('new_start'),
             data.get('date_start'),
-            data.get('date_end'),
+            date_end,
             data.get('amount_norm'),
             data.get('next_verification_date'),
-            1 if not data.get('date_end') else 0,
+            1 if not date_end else 0,
+            event_type,
+            meter_state,
             data.get('is_consumption_paid', 0),
             data.get('is_norm_paid', 0),
             verification_id
         ))
+        # Синхронизируем состояние счётчика услуги.
+        cursor.execute("""
+            UPDATE services
+            SET meter_state = ?
+            WHERE id = (SELECT service_id FROM meter_replacements WHERE id = ?)
+        """, (meter_state, verification_id))
         conn.commit()
 
 def get_active_verification(service_id):
@@ -682,6 +1024,147 @@ def delete_verification(verification_id):
         cursor = conn.cursor()
         cursor.execute("DELETE FROM meter_replacements WHERE id = ? AND type = 'verification'", (verification_id,))
         conn.commit()
+
+def load_all_meter_events():
+    """Возвращает все события из meter_replacements с именем услуги."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT mr.id, mr.service_id, s.key AS service_key,
+                   s.name AS service_name,
+                   COALESCE(mr.date, mr.date_start) AS date,
+                   mr.event_type, mr.meter_state, mr.old_final, mr.new_start,
+                   mr.amount_norm, mr.is_paid, mr.date_start, mr.date_end,
+                   mr.comment
+            FROM meter_replacements mr
+            LEFT JOIN services s ON s.id = mr.service_id
+            ORDER BY COALESCE(mr.date, mr.date_start) DESC, mr.id DESC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+
+def _meter_event_column_type(event_type):
+    """Маппинг event_type → колонка type в meter_replacements."""
+    if event_type in ('verification_start', 'verification_end'):
+        return 'verification'
+    if event_type in ('replacement', 'removal', 'installation'):
+        return event_type
+    return 'replacement'
+
+def add_meter_event(event_data):
+    """Добавляет событие счётчика в meter_replacements."""
+    service_key = event_data.get('service_key')
+    event_type = event_data.get('event_type')
+    type_ = _meter_event_column_type(event_type)
+    is_active = 1 if event_type == 'verification_start' else 0
+    old_final = event_data.get('old_final')
+    if old_final is None:
+        old_final = 0.0
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM services WHERE key = ?", (service_key,))
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Услуга с ключом '{service_key}' не найдена")
+        service_id = row[0]
+
+        cursor.execute("""
+            INSERT INTO meter_replacements (
+                service_id, old_final, new_start, date, is_paid,
+                date_start, date_end, amount_norm, next_verification_date,
+                is_active, type, event_type, meter_state, comment,
+                is_consumption_paid, is_norm_paid
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+        """, (
+            service_id,
+            old_final,
+            event_data.get('new_start'),
+            event_data.get('date'),
+            event_data.get('is_paid', 0),
+            event_data.get('date_start'),
+            event_data.get('date_end'),
+            event_data.get('amount_norm'),
+            event_data.get('next_verification_date'),
+            is_active,
+            type_,
+            event_type,
+            event_data.get('meter_state'),
+            event_data.get('comment'),
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+def update_meter_event(event_id, event_data):
+    """Обновляет событие счётчика в meter_replacements."""
+    event_type = event_data.get('event_type')
+    type_ = _meter_event_column_type(event_type)
+    is_active = 1 if event_type == 'verification_start' else 0
+    old_final = event_data.get('old_final')
+    if old_final is None:
+        old_final = 0.0
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE meter_replacements
+            SET old_final = ?, new_start = ?, date = ?, is_paid = ?,
+                date_start = ?, date_end = ?, amount_norm = ?,
+                next_verification_date = ?, is_active = ?, type = ?,
+                event_type = ?, meter_state = ?, comment = ?
+            WHERE id = ?
+        """, (
+            old_final,
+            event_data.get('new_start'),
+            event_data.get('date'),
+            event_data.get('is_paid', 0),
+            event_data.get('date_start'),
+            event_data.get('date_end'),
+            event_data.get('amount_norm'),
+            event_data.get('next_verification_date'),
+            is_active,
+            type_,
+            event_type,
+            event_data.get('meter_state'),
+            event_data.get('comment'),
+            event_id,
+        ))
+        conn.commit()
+
+def delete_meter_event(event_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM meter_replacements WHERE id = ?", (event_id,))
+        conn.commit()
+
+def recalculate_service_meter_state(service_key):
+    """Пересчитывает services.meter_state по последнему событию услуги."""
+    import config
+
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM services WHERE key = ?", (service_key,))
+        row = cursor.fetchone()
+        if row is None:
+            return
+        service_id = row[0]
+
+        cursor.execute("""
+            SELECT meter_state
+            FROM meter_replacements
+            WHERE service_id = ?
+            ORDER BY COALESCE(date, date_start) DESC, id DESC
+            LIMIT 1
+        """, (service_id,))
+        event_row = cursor.fetchone()
+        meter_state = event_row[0] if (event_row and event_row[0]) else 'active'
+
+        cursor.execute("UPDATE services SET meter_state = ? WHERE id = ?", (meter_state, service_id))
+        conn.commit()
+
+    service = config.services.get(service_key)
+    if service is not None:
+        service.meter_state = meter_state
 
 def create_payment_record(service_key, amount, consumption,
                           start_reading, end_reading, tariff,

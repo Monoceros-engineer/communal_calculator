@@ -13,7 +13,7 @@ from PySide6.QtCore import Qt
 class StatisticsWindow(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Статистика")
+        self.setWindowTitle(self.tr("Статистика"))
         self.setMinimumSize(1200, 700)
         self.setStyleSheet("background-color: white;")
 
@@ -27,7 +27,7 @@ class StatisticsWindow(QDialog):
         top_layout.setSpacing(20)
         # Левая группа: Год
         left_group = QHBoxLayout()
-        left_group.addWidget(QLabel("Год:"))
+        left_group.addWidget(QLabel(self.tr("Год:")))
         self.year_combo = QComboBox()
         self.year_combo.currentIndexChanged.connect(self.update_stats)
         left_group.addWidget(self.year_combo)
@@ -36,9 +36,11 @@ class StatisticsWindow(QDialog):
      
         # Правая группа: Группировка
         right_group = QHBoxLayout()
-        right_group.addWidget(QLabel("Группировка:"))
+        right_group.addWidget(QLabel(self.tr("Группировка:")))
         self.group_combo = QComboBox()
-        self.group_combo.addItems(["По месяцам", "По кварталам", "По годам"])
+        self.group_combo.addItem(self.tr("По месяцам"), 'month')
+        self.group_combo.addItem(self.tr("По кварталам"), 'quarter')
+        self.group_combo.addItem(self.tr("По годам"), 'year')
         self.group_combo.currentIndexChanged.connect(self.update_stats)
         right_group.addWidget(self.group_combo)
         right_group.addStretch()
@@ -67,7 +69,7 @@ class StatisticsWindow(QDialog):
         right_layout.setSpacing(5)
 
         # Заголовок над линейным графиком
-        self.line_title = QLabel("Динамика расходов")
+        self.line_title = QLabel(self.tr("Динамика расходов"))
         self.line_title.setAlignment(Qt.AlignCenter)
         self.line_title.setStyleSheet("font-weight: bold; font-size: 14px;")
         right_layout.addWidget(self.line_title)
@@ -103,7 +105,7 @@ class StatisticsWindow(QDialog):
         """
 
         # Кнопка закрытия
-        close_btn = QPushButton("Закрыть")
+        close_btn = QPushButton(self.tr("Закрыть"))
         close_btn.setStyleSheet(BUTTON_STYLE)
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, alignment=Qt.AlignCenter)
@@ -123,25 +125,26 @@ class StatisticsWindow(QDialog):
             years = [row[0] for row in cursor.fetchall()]
             conn.close()
             if years:
-                self.year_combo.addItem("Все годы") 
-                self.year_combo.addItems(years)
+                self.year_combo.addItem(self.tr("Все годы"), 'all') 
+                for year in years:
+                    self.year_combo.addItem(str(year), str(year))
             else:
-                self.year_combo.addItem("Нет данных")
+                self.year_combo.addItem(self.tr("Нет данных"), 'nodata')
                 self.year_combo.setEnabled(False)
         except Exception as e:
-            self.year_combo.addItem("Ошибка")
+            self.year_combo.addItem(self.tr("Ошибка"), 'error')
             self.year_combo.setEnabled(False)
 
     def update_stats(self):
         """Обновляет графики при выборе года."""
         if self.year_combo.count() == 0 or not self.year_combo.isEnabled():
             return
-        selected = self.year_combo.currentText()
-        if selected in ("Нет данных", "Ошибка"):
+        selected = self.year_combo.currentData()
+        if selected in ('nodata', 'error'):
             return
         
         # Получаем выбранную группировку
-        group = self.group_combo.currentText()
+        group = self.group_combo.currentData()
 
         import sqlite3
         import pandas as pd
@@ -151,7 +154,7 @@ class StatisticsWindow(QDialog):
             conn = sqlite3.connect(get_db_path())
 
             # Определяем условие для фильтрации
-            if selected == "Все годы":
+            if selected == 'all':
                 condition = "1=1"          # без фильтра по году
                 params = ()
             else:
@@ -171,11 +174,11 @@ class StatisticsWindow(QDialog):
 
         # --- Линейный график с группировкой ---
         # В зависимости от выбранной группировки формируем выражение для периода
-            if group == "По месяцам":
+            if group == 'month':
                 period_expr = "strftime('%Y-%m', date)"
-            elif group == "По кварталам":
+            elif group == 'quarter':
                 period_expr = "strftime('%Y', date) || '-Q' || ((strftime('%m', date) + 2) / 3)"
-            else:  # "По годам"
+            else:  # 'year'
                 period_expr = "strftime('%Y', date)"
 
             query_line = f"""
@@ -197,9 +200,9 @@ class StatisticsWindow(QDialog):
             ax1 = self.figure_pie.add_subplot(111)
             if not df_pie.empty:
                 ax1.pie(df_pie['total'], labels=df_pie['service_name'], autopct='%1.1f%%')
-                ax1.set_title("Распределение расходов")
+                ax1.set_title(self.tr("Распределение расходов"))
             else:
-                ax1.text(0.5, 0.5, "Нет данных", ha='center', va='center')
+                ax1.text(0.5, 0.5, self.tr("Нет данных"), ha='center', va='center')
             self.canvas_pie.draw()
 
             # Линейный график на правом холсте
@@ -212,8 +215,8 @@ class StatisticsWindow(QDialog):
                     x_data = df_line.iloc[:, 0]  # берём первый столбец
 
                 ax2.plot(x_data, df_line['total'], marker='o', linestyle='-', color='#2E86C1')
-                ax2.set_xlabel("Период")
-                ax2.set_ylabel("Сумма, руб.")
+                ax2.set_xlabel(self.tr("Период"))
+                ax2.set_ylabel(self.tr("Сумма, руб."))
                 ax2.grid(True, linestyle='--', alpha=0.6)
 
                 # Настройка подписей оси X
@@ -228,7 +231,7 @@ class StatisticsWindow(QDialog):
                     ax2.set_xticklabels(x_data, rotation=45, ha='right')
 
                 # Адаптация ширины для длинных рядов
-                if selected == "Все годы" and self.group_combo.currentText() == "По месяцам" and len(x_data) > 20:
+                if selected == 'all' and self.group_combo.currentData() == 'month' and len(x_data) > 20:
                     extra_width = max(0, (len(x_data) - 20) * 30)
                     new_width = 600 + extra_width
                     self.figure_line.set_figwidth(new_width / 100)
@@ -237,7 +240,7 @@ class StatisticsWindow(QDialog):
                     self.figure_line.set_figwidth(6)
                     self.canvas_line.setFixedWidth(600)
             else:
-                ax2.text(0.5, 0.5, "Нет данных", ha='center', va='center')
+                ax2.text(0.5, 0.5, self.tr("Нет данных"), ha='center', va='center')
             self.canvas_line.draw()
 
         except Exception as e:
