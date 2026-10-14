@@ -1,9 +1,9 @@
-; Скрипт для установки Калькулятора коммуналки (версия 1.3)
+; Скрипт для установки Калькулятора коммуналки (версия 1.4)
 ; Сборка через Nuitka, папка main_pyside6.dist
 
 [Setup]
 AppName=Калькулятор коммуналки
-AppVersion=1.3
+AppVersion=1.4
 AppPublisher=Monoceros-engineer
 AppPublisherURL=https://github.com/Monoceros-engineer/communal_calculator
 AppSupportURL=https://github.com/Monoceros-engineer/communal_calculator
@@ -18,7 +18,7 @@ UninstallDisplayIcon={app}\main_pyside6.exe
 Compression=lzma2
 SolidCompression=yes
 OutputDir=Output
-OutputBaseFilename=CommunalCalculator_Setup_v1.3
+OutputBaseFilename=CommunalCalculator_Setup_v1.4
 
 ; Иконка установщика
 SetupIconFile=icon.ico
@@ -38,8 +38,12 @@ LanguageDetectionMethod=uilanguage
 Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 ; Файлы для копирования (всё из папки сборки Nuitka)
+; ВАЖНО: если Nuitka собирался с --output-dir=build, путь должен быть
+;   "build\main_pyside6.dist\*"
+; Если без --output-dir, оставь как есть:
+;   "main_pyside6.dist\*"
 [Files]
-Source: "main_pyside6.dist\*"; DestDir: "{app}"; Flags: recursesubdirs
+Source: "build\main_pyside6.dist\*"; DestDir: "{app}"; Flags: recursesubdirs
 
 ; Создаем ярлык на рабочем столе
 [Tasks]
